@@ -19,8 +19,8 @@ A modern, lightweight FastAPI microservice template that provides. Built with Do
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
-cd agent-service
+git clone https://github.com/ScottRBK/fast-api-service
+cd fast-api-service
 
 # Run in development mode
 cd docker
@@ -50,7 +50,7 @@ python -m app.main
 ## 📁 Project Structure 
 
 ```
-agent-service/
+fast-api-service/
 ├── app/
 │   ├── api/
 │   │   └── routes/
@@ -84,7 +84,7 @@ The application uses environment-based configuration with sensible defaults:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SERVICE_NAME` | "Agent Service" | Name of the service |
+| `SERVICE_NAME` | "Fast API Service" | Name of the service |
 | `SERVICE_VERSION` | "1.0.0" | Version of the service |
 | `HOST` | "0.0.0.0" | Server host address |
 | `PORT` | 8000 | Server port |
