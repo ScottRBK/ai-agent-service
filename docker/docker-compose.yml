@@ -1,0 +1,13 @@
+# Environment variables loaded automatically from docker/.env
+# Simple usage: cd docker && docker-compose --profile dev up
+
+services:
+  # Microservice - Development Mode
+  api-microservice-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: development
+    container_name: ${DEV_CONTAINER_NAME:-api-microservice-dev}
+    ports:
+      - "${PORT:-8000}:${CONTAINER_PORT:-8000}"
