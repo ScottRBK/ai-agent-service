@@ -6,9 +6,9 @@ from app.utils.logging import logger
 from app.api.routes.health import router as health_router
 from fastapi import FastAPI
 app = FastAPI(
-    title="Agent Service",
-    description="A lightweight microservice that provides AI Agent Capabilities through multiple providers",
-    version="1.0.0",
+    title=settings.SERVICE_NAME,
+    description=settings.SERVICE_DESCRIPTION,
+    version=settings.SERVICE_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
 )

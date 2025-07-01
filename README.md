@@ -1,10 +1,11 @@
-# Agent Service
+# AI Agent Service
 
-A modern, lightweight FastAPI microservice template that provides. Built with Docker, comprehensive logging, and production-ready features.
+A modern, intelligent AI Agent Service built with FastAPI that provides automated decision-making and AI-powered capabilities. Built with Docker, comprehensive logging, and production-ready features.
 
 ## ✨ Features
 
 - **FastAPI Framework** - Modern, fast web framework with automatic API documentation
+- **AI Agent Capabilities** - Intelligent automation and decision-making
 - **Health Check Endpoints** - Built-in monitoring and status endpoints
 - **Docker Support** - Multi-stage builds with development and production targets
 - **Environment Configuration** - Flexible settings with environment variable support
@@ -19,8 +20,8 @@ A modern, lightweight FastAPI microservice template that provides. Built with Do
 
 ```bash
 # Clone the repository
-git clone https://github.com/ScottRBK/fast-api-service
-cd fast-api-service
+git clone https://github.com/ScottRBK/ai-agent-service
+cd ai-agent-service
 
 # Run in development mode
 cd docker
@@ -50,7 +51,7 @@ python -m app.main
 ## 📁 Project Structure 
 
 ```
-fast-api-service/
+ai-agent-service/
 ├── app/
 │   ├── api/
 │   │   └── routes/
@@ -84,7 +85,7 @@ The application uses environment-based configuration with sensible defaults:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SERVICE_NAME` | "Fast API Service" | Name of the service |
+| `SERVICE_NAME` | "AI Agent Service" | Name of the service |
 | `SERVICE_VERSION` | "1.0.0" | Version of the service |
 | `HOST` | "0.0.0.0" | Server host address |
 | `PORT` | 8000 | Server port |
@@ -119,7 +120,7 @@ DEV_CONTAINER_NAME=my-agent-service
 {
   "status": "healthy",
   "timestamp": "2024-01-01T12:00:00.000000",
-  "service": "Agent Service",
+  "service": "AI Agent Service",
   "version": "1.0.0"
 }
 ```
@@ -134,14 +135,14 @@ docker-compose --profile dev up --build
 
 ### Production Build
 ```bash
-docker build -f docker/Dockerfile --target production -t agent-service:latest .
-docker run -p 8000:8000 agent-service:latest
+docker build -f docker/Dockerfile --target production -t ai-agent-service:latest .
+docker run -p 8000:8000 ai-agent-service:latest
 ```
 
 ### Docker Environment Variables
 ```bash
 # Override default port
-docker run -e PORT=8001 -p 8001:8001 agent-service:latest
+docker run -e PORT=8001 -p 8001:8001 ai-agent-service:latest
 ```
 
 ## 🧪 Testing
@@ -166,7 +167,7 @@ curl http://localhost:8001/health
 {
   "status": "healthy",
   "timestamp": "2024-01-01T12:00:00.000000",
-  "service": "Agent Service", 
+  "service": "AI Agent Service", 
   "version": "1.0.0"
 }
 ```

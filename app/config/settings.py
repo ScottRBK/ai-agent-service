@@ -8,9 +8,9 @@ class Settings(BaseSettings):
 
 
     # Application Info
-    SERVICE_NAME: str = "Agent Service"
+    SERVICE_NAME: str = "AI Agent Service"
     SERVICE_VERSION: str = "1.0.0"
-    SERVICE_DESCRIPTION: str = "A lightweight microservice"
+    SERVICE_DESCRIPTION: str = "AI Agent Service that provides intelligent automation and AI-powered capabilities"
 
     # Server Configuration
     HOST: str = "0.0.0.0"
