@@ -7,6 +7,7 @@ from typing import Optional
 from datetime import datetime
 
 from app.models.providers import ProviderConfig
+from app.models.tools import Tool
 
 class ProviderError(Exception):
     """Base exception for provider errors."""
@@ -62,6 +63,11 @@ class BaseProvider(ABC):
     @abstractmethod
     async def get_model_list(self) -> list[str]:
         """Get a list of available models."""
+        pass
+
+    @abstractmethod 
+    async def send_input(self, input: str, model: str, tools: list[Tool]) -> str:
+        """Send input to the provider and return the response."""
         pass
 
 
