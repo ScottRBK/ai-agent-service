@@ -29,6 +29,7 @@ class ProviderConfig(BaseModel):
 
 class OllamaConfig(ProviderConfig):
     "Ollama-specific configuration"
+    name: str = "Ollama"
     provider_type: ProviderType = ProviderType.OLLAMA
     base_url: str = "http://localhost:11434"
     default_model: str = "llama3.1:8b"
@@ -36,6 +37,7 @@ class OllamaConfig(ProviderConfig):
 
 class OpenAIConfig(ProviderConfig):
     "OpenAI-specific configuration"
+    name: str = "OpenAI"
     provider_type: ProviderType = ProviderType.OPENAI
     base_url: str = "https://api.openai.com/v1"
     default_model: str = "gpt-4o-mini"
@@ -43,6 +45,7 @@ class OpenAIConfig(ProviderConfig):
 
 class AzureOpenAIConfig(ProviderConfig):
     "Azure-OpenAI-specific configuration"
+    name: str = "AzureOpenAI"
     provider_type: ProviderType = ProviderType.AZURE_OPENAI
     base_url: str = os.getenv("AZURE_OPENAI_BASE_URL", "https://{your-custom-endpoint}.openai.azure.com/")
     default_model: str = os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4.1-nano")

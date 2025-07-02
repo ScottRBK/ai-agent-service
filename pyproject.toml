@@ -2,3 +2,6 @@
 name = "ai-agent-service"
 version = "0.1.0"
 dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["app*"]
