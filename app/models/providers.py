@@ -2,13 +2,18 @@
 Provider configuration models and validation.
 All Pydantic models for provider configurations.
 """
-
+import os
 from pydantic import BaseModel
 from enum import Enum
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class ProviderType(str, Enum):
     """Supported provider types"""
     OLLAMA = "ollama"
+    OPENAI = "openai"
+    AZURE_OPENAI = "azure_openai"
 
 
 class ProviderConfig(BaseModel):
@@ -35,3 +40,12 @@ class OpenAIConfig(ProviderConfig):
     base_url: str = "https://api.openai.com/v1"
     default_model: str = "gpt-4o-mini"
     model_list: list[str] = ["gpt-4o-mini", "gpt-4o"]
+
+class AzureOpenAIConfig(ProviderConfig):
+    "Azure-OpenAI-specific configuration"
+    provider_type: ProviderType = ProviderType.AZURE_OPENAI
+    base_url: str = os.getenv("AZURE_OPENAI_BASE_URL", "https://{your-custom-endpoint}.openai.azure.com/")
+    default_model: str = os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4.1-nano")
+    model_list: list[str] = ["gpt-4.1-nano", "gpt-4o"]
+    api_version: str = "2025-03-01-preview"
+    api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")

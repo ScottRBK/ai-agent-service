@@ -40,9 +40,9 @@ class ProviderModelNotFoundError(ProviderError):
 
 class BaseProvider(ABC):
     """Abstract base class for all LLM providers."""
-    def __init__(self, config: ProviderConfig, name: str):
+    def __init__(self, config: ProviderConfig):
         self.config = config
-        self.name = name
+        self.name = config.name
         self.provider_type = config.provider_type.value
 
         self.total_requests = 0
@@ -66,8 +66,10 @@ class BaseProvider(ABC):
         pass
 
     @abstractmethod 
-    async def send_input(self, input: str, model: str, tools: list[Tool]) -> str:
+    async def send_input(self, context: str, model: str, tools: list[Tool]) -> str:
         """Send input to the provider and return the response."""
         pass
 
-
+    async def stream_input(self, context: str, model: str, tools: list[Tool]) -> str:
+        """Stream input to the provider and yield the response."""
+        pass

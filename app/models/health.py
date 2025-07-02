@@ -14,20 +14,20 @@ class HealthStatus(BaseModel):
     status: str = Field(
         ..., 
         description="Service health status",
-        example="healthy"
+        json_schema_extra={"example": "healthy"}
     )
     timestamp: datetime = Field(
         ..., 
         description="When the health check was performed",
-        example="2024-12-30T20:12:25.673396"
+        json_schema_extra={"example": "2024-12-30T20:12:25.673396"}
     )
     service: str = Field(
         ..., 
         description="Name of the service",
-        example="API Microservice"
+        json_schema_extra={"example": "API Microservice"}
     )
     version: str = Field(
         ..., 
         description="Service version",
-        example="1.0.0"
+        json_schema_extra={"example": "1.0.0"}
     )
