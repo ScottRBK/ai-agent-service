@@ -48,6 +48,9 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
+## Software Architecture
+![High Level Architecture](architecture.png "High Level Architecture")
+
 ## 📁 Project Structure 
 
 ```
