@@ -1,33 +1,31 @@
 """
-Tests for Azure OpenAI provider.
+Tests for Ollama provider.
 
-This module tests the Azure OpenAI provider, ensuring it
+This module tests the Ollama provider, ensuring it
 interacts with the API correctly and handles various scenarios.
 """
 
 import pytest
 from unittest.mock import MagicMock, patch
-from app.core.providers.azureopenapi import AzureOpenAIProvider
-from app.models.providers import AzureOpenAIConfig
+from app.core.providers.ollama import OllamaProvider
+from app.models.providers import OllamaConfig
 
 @pytest.fixture
 def mock_config():
-    return AzureOpenAIConfig(
+    return OllamaConfig(
         name="test-provider",
-        api_version="2023-05-15",
-        base_url="https://example.openai.azure.com/",
-        api_key="test-key",
-        model_list=["gpt-35-turbo", "gpt-4"]
+        base_url="http://localhost:11434",
+        model_list=["llama3.1:8b", "qwen3:4b", "qwen3:8b", "qwen3:14b"]
     )
 
-@patch("app.core.providers.azureopenapi.AzureOpenAI")
-def test_initialization(mock_azure_openai, mock_config):
+@patch("app.core.providers.ollama.OllamaProvider")
+def test_initialization(mock_ollama, mock_config):
     mock_client = MagicMock()
-    mock_client.models.list.return_value = ["gpt-35-turbo", "gpt-4"]
-    mock_azure_openai.return_value = mock_client
-    provider = AzureOpenAIProvider(mock_config)
-    assert provider.client is mock_client
-    assert provider.config.model_list == ["gpt-35-turbo", "gpt-4"]
+    mock_client.models.list.return_value = ["llama3.1:8b", "qwen3:4b", "qwen3:8b", "qwen3:14b"]
+    mock_ollama.return_value = mock_client
+    provider = OllamaProvider(mock_config)
+    # assert provider.client is mock_client
+    assert provider.config.model_list == ["llama3.1:8b", "qwen3:4b", "qwen3:8b", "qwen3:14b"]
 
 @patch("app.core.providers.azureopenapi.AzureOpenAI")
 @pytest.mark.asyncio

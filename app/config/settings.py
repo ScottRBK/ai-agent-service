@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     AZURE_OPENAI_API_VERSION: str = "2025-03-01-preview"
     AZURE_OPENAI_API_KEY: str = ""
 
+    # Ollama Configuration
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_DEFAULT_MODEL: str = "qwen3:4b"
+
     """Pydantic configuration."""   
     model_config = ConfigDict(
         env_file = ".env",

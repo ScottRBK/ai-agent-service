@@ -66,10 +66,17 @@ class BaseProvider(ABC):
         pass
 
     @abstractmethod 
-    async def send_input(self, context: str, model: str, tools: list[Tool]) -> str:
+    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
         """Send input to the provider and return the response."""
         pass
 
-    async def stream_input(self, context: str, model: str, tools: list[Tool]) -> str:
+    @abstractmethod
+    async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
         """Stream input to the provider and yield the response."""
         pass
+
+    async def record_successful_call(self) -> None:
+        """Record a successful call."""
+        self.total_requests += 1
+        self.success_requests += 1
+        self.last_successful_call = datetime.now()

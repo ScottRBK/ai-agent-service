@@ -31,9 +31,9 @@ class OllamaConfig(ProviderConfig):
     "Ollama-specific configuration"
     name: str = "Ollama"
     provider_type: ProviderType = ProviderType.OLLAMA
-    base_url: str = "http://localhost:11434"
-    default_model: str = "llama3.1:8b"
-    model_list: list[str] = ["llama3.1:8b", "llama3.1:70b", "qwen3:8b"]
+    base_url: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    default_model: str = os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3:4b")
+    model_list: list[str] = ["qwen3:4b", "qwen3:8b", "qwen3:14b"]
 
 class OpenAIConfig(ProviderConfig):
     "OpenAI-specific configuration"

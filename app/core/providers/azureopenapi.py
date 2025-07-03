@@ -1,3 +1,8 @@
+"""
+Azure OpenAI Provider implementation.
+Integrates with the Azure OpenAI API.
+"""
+
 from app.core.providers.base import BaseProvider
 from app.models.providers import AzureOpenAIConfig
 from app.models.tools import Tool
@@ -17,14 +22,20 @@ class AzureOpenAIProvider(BaseProvider):
         self.config.model_list = self.client.models.list()
         
     async def cleanup(self) -> None:
-        """Cleanup resources and close connections."""
-        pass
+        """Cleanup resources"""
+        try:
+            if self.client:
+                self.client = None
+                logging.debug(f"AzureOpenAI Provider {self.config.name} cleaned up")
+        except Exception as e:
+            logging.warning(f"Error during cleanup AzureOpenAI Provider {self.config.name} cleanup: {e}")
+
 
     async def get_model_list(self) -> list[str]:
         """Get a list of available models."""
         return self.config.model_list
 
-    async def send_input(self, context: str, model: str, instructions: str, tools: list[Tool]) -> str:
+    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
         """Send input to the provider and return the response."""
         response = self.client.responses.create(
             model=model,
@@ -33,14 +44,13 @@ class AzureOpenAIProvider(BaseProvider):
             tools=tools
 
         )
-        self.total_requests += 1
-        self.success_requests += 1
-        self.last_successful_call = datetime.now()
+
+        await self.record_successful_call()
 
         logging.debug(f"AzureOpenAIProvider - send_input - Success: {self.success_requests}, Total: {self.total_requests} /n response: {response.model_dump_json(indent=2)}")
 
         return response.output_text
 
-    async def stream_input(self, context: str, model: str, tools: list[Tool]) -> str:
+    async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
         """Stream input to the provider and yield the response."""
         pass
