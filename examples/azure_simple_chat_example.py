@@ -5,15 +5,18 @@ import asyncio
 import app.main
 from app.models.providers import ProviderConfig, AzureOpenAIConfig
 from app.core.providers.azureopenapi import AzureOpenAIProvider
-provider = AzureOpenAIProvider(AzureOpenAIConfig())
 
-
-
-instructions = "You are a helpful assistant. Please respond to the user's input."
-context = []
 
 async def main():
+
+    provider = AzureOpenAIProvider(AzureOpenAIConfig())
+    await provider.initialize()
+
+
+    instructions = "You are a helpful assistant. Please respond to the user's input."
+    context = []
     message = await asyncio.to_thread(input, "You:")
+    
     context.append({"role": "user", "content": message})
 
     while True:
@@ -23,9 +26,9 @@ async def main():
         instructions,
         []
     )
-        await asyncio.to_thread(print, response)
+        await asyncio.to_thread(print, f"\n\033[31m{provider.name}: \033[32m{response}\n")
         context.append({"role": "assistant", "content": response})
-        message = await asyncio.to_thread(input, "You:")
+        message = await asyncio.to_thread(input, "\033[37mYou:")
         context.append({"role": "user", "content": message})
 
 if __name__ == "__main__":

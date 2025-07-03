@@ -12,6 +12,20 @@ class OllamaProvider(BaseProvider):
         self.config: OllamaConfig = config
         # self.config.model_list = self.client.list()
 
+
+    async def initialize(self) -> None:
+        """Initialize resources."""
+
+        try:
+            
+            logging.info(f"Initializing Ollama Provider {self.config.name}")
+            self.client = AsyncClient(host=self.config.base_url)
+            self.config.model_list = await self.client.list()
+            logging.info(f"Ollama Provider {self.config.name} initialized successfully")
+
+        except Exception as e:
+            logging.warning(f"Error during initialization Ollama Provider {self.config.name}: {e}")
+
     async def cleanup(self) -> None:
         """Cleanup resources"""
         try:
@@ -25,7 +39,7 @@ class OllamaProvider(BaseProvider):
         """Get a list of available models."""
         return self.config.model_list
 
-    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
+    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None) -> str:
         """Send input to the provider and return the response."""
         messages = []
 
@@ -41,10 +55,12 @@ class OllamaProvider(BaseProvider):
 
         await self.record_successful_call()
 
-        logging.debug(f"OllamaProvider - send_chat - Success: {self.success_requests}, Total: {self.total_requests} /n response: {response.model_dump_json(indent=2)}")
+        logging.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
+                      Total: {self.total_requests} 
+                      /n response: {response.model_dump_json(indent=2)}""")
 
         return response['message']['content']
     
-    async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
+    async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None) -> str:
         """Stream input to the provider and yield the response."""
         pass
