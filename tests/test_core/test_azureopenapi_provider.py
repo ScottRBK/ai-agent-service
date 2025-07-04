@@ -7,6 +7,8 @@ interacts with the API correctly and handles various scenarios.
 
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
+import importlib
+import sys
 from app.core.providers.azureopenapi import AzureOpenAIProvider
 from app.models.providers import AzureOpenAIConfig
 
@@ -40,6 +42,42 @@ async def test_get_model_list(mock_azure_openai, mock_config):
     provider = AzureOpenAIProvider(mock_config)
     models = await provider.get_model_list()
     assert models == ["gpt-35-turbo", "gpt-4"]
+
+@patch.dict("os.environ", {
+    "AZURE_OPENAI_MODEL_LIST": "gpt-4o,gpt-4o-mini,claude-3",
+    "AZURE_OPENAI_BASE_URL": "https://example.openai.azure.com/",
+    "AZURE_OPENAI_DEFAULT_MODEL": "gpt-4o",
+    "AZURE_OPENAI_API_VERSION": "2023-05-15",
+    "AZURE_OPENAI_API_KEY": "test-key"
+}, clear=False)
+@patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
+@pytest.mark.asyncio
+async def test_get_model_list_from_env_var(mock_azure_openai):
+    """Test that model list is correctly read from environment variable"""
+    
+    # Force reload the providers module to pick up our environment changes
+    import app.models.providers
+    importlib.reload(app.models.providers)
+    
+    # Import after reload to get the updated config
+    from app.models.providers import AzureOpenAIConfig
+    
+    # Create config without explicitly setting model_list, so it reads from env var
+    config = AzureOpenAIConfig(
+        name="test-provider"
+    )
+    
+    mock_client = MagicMock()
+    mock_client.models.list.return_value = ["gpt-4o", "gpt-4o-mini", "claude-3"]
+    mock_azure_openai.return_value = mock_client
+    
+    provider = AzureOpenAIProvider(config)
+    models = await provider.get_model_list()
+    
+    # Verify the model list matches what was set in the environment variable
+    assert models == ["gpt-4o", "gpt-4o-mini", "claude-3"]
+    # Verify the config read the env var correctly
+    assert config.model_list == ["gpt-4o", "gpt-4o-mini", "claude-3"]
 
 @patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
 @pytest.mark.asyncio
