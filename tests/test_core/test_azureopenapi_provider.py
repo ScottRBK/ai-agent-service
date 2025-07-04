@@ -52,9 +52,9 @@ async def test_get_model_list(mock_azure_openai, mock_config):
 }, clear=False)
 @patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
 @pytest.mark.asyncio
-async def test_get_model_list_from_env_var(mock_azure_openai):
-    """Test that model list is correctly read from environment variable"""
-    
+async def test_get_config_from_env_var(mock_azure_openai):
+    """Test that config is correctly read from environment variable"""
+
     # Force reload the providers module to pick up our environment changes
     import app.models.providers
     importlib.reload(app.models.providers)
@@ -76,8 +76,13 @@ async def test_get_model_list_from_env_var(mock_azure_openai):
     
     # Verify the model list matches what was set in the environment variable
     assert models == ["gpt-4o", "gpt-4o-mini", "claude-3"]
-    # Verify the config read the env var correctly
+    
+    # Verify all environment variables were read correctly
     assert config.model_list == ["gpt-4o", "gpt-4o-mini", "claude-3"]
+    assert config.base_url == "https://example.openai.azure.com/"
+    assert config.default_model == "gpt-4o"
+    assert config.api_version == "2023-05-15"
+    assert config.api_key == "test-key"
 
 @patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
 @pytest.mark.asyncio
