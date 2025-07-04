@@ -8,6 +8,7 @@ from datetime import datetime
 
 from app.models.providers import ProviderConfig
 from app.models.tools import Tool
+from app.models.health import HealthStatus
 
 class ProviderError(Exception):
     """Base exception for provider errors."""
@@ -54,6 +55,11 @@ class BaseProvider(ABC):
 
         self.client = None
         self.initialized = False
+
+    @abstractmethod 
+    async def health_check(self) -> HealthStatus:
+        """Check the health of the provider."""
+        pass
 
     @abstractmethod
     async def cleanup(self) -> None:

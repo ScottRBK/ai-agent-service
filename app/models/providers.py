@@ -16,13 +16,13 @@ class ProviderType(str, Enum):
     AZURE_OPENAI = "azure_openai"
     AZURE_OPENAI_CC = "azure_openai_cc" # Azure OpenAI Chat Completions
 
-
 class ProviderConfig(BaseModel):
     """Base configuration for all LLM providers"""
     name: str
     provider_type: ProviderType
     timeout: int = 30
     max_retries: int = 3
+    version: str = ""
 
     track_usage: bool = False
     log_requests: bool = False

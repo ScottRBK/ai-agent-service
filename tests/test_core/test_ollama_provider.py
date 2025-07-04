@@ -35,6 +35,38 @@ async def test_initialization(mock_ollama, mock_config):
 
 @patch("app.core.providers.ollama.AsyncClient")
 @pytest.mark.asyncio
+async def test_health_check_healthy(mock_ollama, mock_config):
+    mock_client = MagicMock()
+    mock_client.list = AsyncMock(return_value=["llama3.1:8b", "qwen3:4b", "qwen3:8b", "qwen3:14b"])
+    mock_ollama.return_value = mock_client
+    provider = OllamaProvider(mock_config)
+    await provider.initialize()
+    health = await provider.health_check()
+    assert health.status == "healthy"
+    assert health.timestamp is not None
+    assert health.service == "test-provider"
+    assert health.version is not None
+    assert health.error_details is None
+
+@patch("app.core.providers.ollama.AsyncClient")
+@pytest.mark.asyncio
+async def test_health_check_unhealthy(mock_ollama, mock_config):
+    mock_client = MagicMock()
+    mock_client.list = AsyncMock(side_effect=Exception("Test error"))
+    mock_ollama.return_value = mock_client
+    provider = OllamaProvider(mock_config)
+    await provider.initialize()
+    health = await provider.health_check()
+    assert health.status == "unhealthy"
+    assert health.timestamp is not None
+    assert health.service == "test-provider"
+    assert health.version is not None
+    assert health.error_details is "Test error"
+
+
+
+@patch("app.core.providers.ollama.AsyncClient")
+@pytest.mark.asyncio
 async def test_get_model_list(mock_ollama_client, mock_config):
     mock_client = MagicMock()
     mock_client.models.list.return_value = ["llama3.1:8b", "qwen3:4b", "qwen3:8b", "qwen3:14b"]

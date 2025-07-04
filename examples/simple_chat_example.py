@@ -5,6 +5,7 @@ import asyncio
 import app.main
 import questionary
 from app.core.providers.manager import ProviderManager
+from app.utils.logging import logger
 
 async def select_provider(provider_manager: ProviderManager):
     """Displays the available providers and prompts the user to select them in the CLI."""

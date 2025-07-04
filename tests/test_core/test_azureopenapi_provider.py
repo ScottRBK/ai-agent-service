@@ -35,6 +35,36 @@ async def test_initialization(mock_azure_openai, mock_config):
 
 @patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
 @pytest.mark.asyncio
+async def test_health_check_healthy(mock_azure_openai, mock_config):
+    mock_client = MagicMock()
+    mock_client.responses.create = AsyncMock(return_value=MagicMock())
+    mock_azure_openai.return_value = mock_client
+    provider = AzureOpenAIProvider(mock_config)
+    await provider.initialize()
+    health = await provider.health_check()
+    assert health.status == "healthy"
+    assert health.timestamp is not None
+    assert health.service == "test-provider"
+    assert health.version is not None
+    assert health.error_details is None
+
+@patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
+@pytest.mark.asyncio
+async def test_health_check_unhealthy(mock_azure_openai, mock_config):
+    mock_client = MagicMock()
+    mock_client.responses.create = AsyncMock(side_effect=Exception("Test error"))
+    mock_azure_openai.return_value = mock_client
+    provider = AzureOpenAIProvider(mock_config)
+    await provider.initialize()
+    health = await provider.health_check()
+    assert health.status == "unhealthy"
+    assert health.timestamp is not None
+    assert health.service == "test-provider"
+    assert health.version is not None
+    assert health.error_details is "Test error"
+
+@patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
+@pytest.mark.asyncio
 async def test_get_model_list(mock_azure_openai, mock_config):
     mock_client = MagicMock()
     mock_client.models.list.return_value = ["gpt-35-turbo", "gpt-4"]

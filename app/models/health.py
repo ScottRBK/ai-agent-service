@@ -1,9 +1,10 @@
 """
-This module defines the HealthStatus model for the health check endpoints.
+This module defines the HealthStatus model for the health check endpoints and provider models.
 """
 
 from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Optional
 
 class HealthStatus(BaseModel):
     """
@@ -30,4 +31,9 @@ class HealthStatus(BaseModel):
         ..., 
         description="Service version",
         json_schema_extra={"example": "1.0.0"}
+    )
+    error_details: Optional[str] = Field(
+        None,
+        description="Error details if the service is not healthy",
+        json_schema_extra={"example": "Error details if the service is not healthy"}
     )
