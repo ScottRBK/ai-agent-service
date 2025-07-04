@@ -1,27 +1,33 @@
 """
-This example shows how to use the OllamaProvider to send a message to the Ollama API.
+This example shows how to use the AzureOpenAIProvider to send a message to the Azure OpenAI API.
 """
 import asyncio
 import app.main
-from app.models.providers import ProviderConfig, OllamaConfig
-from app.core.providers.ollama import OllamaProvider
+from app.models.providers import ProviderConfig, AzureOpenAIConfig
+from app.core.providers.azureopenapi_cc import AzureOpenAIProviderCC
 
 
 async def main():
-    provider = OllamaProvider(OllamaConfig())
+
+    provider = AzureOpenAIProviderCC(AzureOpenAIConfig())
+    await provider.initialize()
+    model = provider.config.default_model
+    print(provider.config)
+
+
 
     instructions = "You are a helpful assistant. Please respond to the user's input."
     context = []
-
     message = await asyncio.to_thread(input, "You:")
+    
     context.append({"role": "user", "content": message})
 
     while True:
         response = await provider.send_chat(
-            context,
-            provider.config.default_model,
-            instructions,
-            []
+            model=model,
+            instructions=instructions,
+            context=context,
+            tools=[]
         )
         await asyncio.to_thread(print, f"\n\033[31m{provider.name}: \033[32m{response}\n")
         context.append({"role": "assistant", "content": response})

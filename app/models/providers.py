@@ -14,6 +14,7 @@ class ProviderType(str, Enum):
     OLLAMA = "ollama"
     OPENAI = "openai"
     AZURE_OPENAI = "azure_openai"
+    AZURE_OPENAI_CC = "azure_openai_cc" # Azure OpenAI Chat Completions
 
 
 class ProviderConfig(BaseModel):
@@ -50,5 +51,5 @@ class AzureOpenAIConfig(ProviderConfig):
     base_url: str = os.getenv("AZURE_OPENAI_BASE_URL", "https://{your-custom-endpoint}.openai.azure.com/")
     default_model: str = os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4.1-nano")
     model_list: list[str] = ["gpt-4.1-nano", "gpt-4o"]
-    api_version: str = "2025-03-01-preview"
+    api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2025-03-01-preview")
     api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")

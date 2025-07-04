@@ -11,6 +11,8 @@ async def main():
 
     provider = AzureOpenAIProvider(AzureOpenAIConfig())
     await provider.initialize()
+    print(provider.config)
+
 
 
     instructions = "You are a helpful assistant. Please respond to the user's input."
@@ -21,11 +23,11 @@ async def main():
 
     while True:
         response = await provider.send_chat(
-            context,
-            provider.config.default_model,
-        instructions,
-        []
-    )
+            model=model,
+            instructions=instructions,
+            context=context,
+            tools=[]
+        )
         await asyncio.to_thread(print, f"\n\033[31m{provider.name}: \033[32m{response}\n")
         context.append({"role": "assistant", "content": response})
         message = await asyncio.to_thread(input, "\033[37mYou:")
