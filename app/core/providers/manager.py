@@ -25,13 +25,13 @@ class ProviderManager:
             },
             "azure_openai": {
                 "name": "Azure OpenAI",
-                "description": "Azure OpenAI API (Legacy)",
+                "description": "Azure OpenAI API",
                 "class": AzureOpenAIProvider,
                 "config_class": AzureOpenAIConfig
             },
             "azure_openai_cc": {
                 "name": "Azure OpenAI Chat Completions",
-                "description": "Azure OpenAI Chat Completions API",
+                "description": "Azure OpenAI Chat Completions API (Legacy)",
                 "class": AzureOpenAIProviderCC,
                 "config_class": AzureOpenAIConfig
             }
