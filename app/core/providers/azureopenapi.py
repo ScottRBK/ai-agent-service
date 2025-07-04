@@ -27,7 +27,6 @@ class AzureOpenAIProvider(BaseProvider):
                 azure_endpoint=self.config.base_url,
                 azure_ad_token=self.config.api_key
             )
-            self.config.model_list = await self.client.models.list()
             logging.info(f"AzureAI provider {self.config.name} initialized successfully")
 
         except Exception as e:

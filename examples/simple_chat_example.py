@@ -3,19 +3,62 @@ This example shows how to use the AzureOpenAIProvider to send a message to the A
 """
 import asyncio
 import app.main
-from app.models.providers import ProviderConfig, AzureOpenAIConfig
-from app.core.providers.azureopenapi_cc import AzureOpenAIProviderCC
+import questionary
+from app.core.providers.manager import ProviderManager
 
+async def select_provider(provider_manager: ProviderManager):
+    """Displays the available providers and prompts the user to select them in the CLI."""
+    providers = provider_manager.list_providers()
+    provider_choices = [
+        questionary.Choice(title=info['name'], value=key)
+        for key, info in providers.items()
+    ]
+    selected_provider = await asyncio.to_thread(
+        lambda: questionary.select(
+            "Please select a provider:",
+            choices=provider_choices
+        ).ask()
+    )
+    print(f"You selected: {selected_provider}")
+    return selected_provider
+
+async def select_model(provider):
+    """Prompts the user to select a model from the provider."""
+    models = await provider.get_model_list()
+    for model in models:
+        print(model)
+    model_choices = [
+        questionary.Choice(title=model, value=model) for model in models
+    ]
+    selected_model = await asyncio.to_thread(
+        lambda: questionary.select(
+            "Please select a model:",
+            choices=model_choices
+        ).ask()
+    )
+    print(f"You selected model: {selected_model}")
+    return selected_model
 
 async def main():
 
-    provider = AzureOpenAIProviderCC(AzureOpenAIConfig())
+    provider_manager = ProviderManager()
+    
+    selected_provider = await select_provider(provider_manager)
+    
+    if not selected_provider:
+        print("No provider selected. Exiting.")
+        return
+        
+    provider_info = provider_manager.get_provider(selected_provider)
+    provider_class = provider_info["class"]
+    config_class = provider_info["config_class"]
+    provider = provider_class(config_class())
     await provider.initialize()
-    model = provider.config.default_model
-    print(provider.config)
 
-
-
+    model = await select_model(provider)
+    if not model:
+        print(f"No model selected. Using default model {provider.config.default_model}.")
+  
     instructions = "You are a helpful assistant. Please respond to the user's input."
     context = []
     message = await asyncio.to_thread(input, "You:")

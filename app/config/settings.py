@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     AZURE_OPENAI_DEFAULT_MODEL: str = "gpt-4.1-nano"
     AZURE_OPENAI_API_VERSION: str = "2025-03-01-preview"
     AZURE_OPENAI_API_KEY: str = ""
+    AZURE_OPENAI_MODEL_LIST: str = "gpt-4o-mini|gpt-4.1-nano"
 
     # Ollama Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"

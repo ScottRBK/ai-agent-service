@@ -50,6 +50,6 @@ class AzureOpenAIConfig(ProviderConfig):
     provider_type: ProviderType = ProviderType.AZURE_OPENAI
     base_url: str = os.getenv("AZURE_OPENAI_BASE_URL", "https://{your-custom-endpoint}.openai.azure.com/")
     default_model: str = os.getenv("AZURE_OPENAI_DEFAULT_MODEL", "gpt-4.1-nano")
-    model_list: list[str] = ["gpt-4.1-nano", "gpt-4o"]
+    model_list: list[str] = os.getenv("AZURE_OPENAI_MODEL_LIST", "gpt-4.1-nano,gpt-4o-mini").split(",")
     api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2025-03-01-preview")
     api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
