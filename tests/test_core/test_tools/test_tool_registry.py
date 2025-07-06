@@ -1,0 +1,93 @@
+import importlib
+import pytest
+from pydantic import BaseModel, Field
+from app.core.tools.tool_registry import register_tool, ToolRegistry, TOOL_REGISTRY
+from app.models.tools.tools import ToolType
+
+
+@pytest.fixture(autouse=True)
+def clean_tool_registry():
+    """Start each test with a fresh registry that only contains the dummy echo tool."""
+    import app.core.tools.tool_registry as tr
+    # This was way harder than it should have been.
+
+    # 1) Wipe the registry so we have a clean slate
+    tr.TOOL_REGISTRY.clear()
+
+    # 2) Re-register the dummy echo tool so tests can rely on it
+    class _EchoParams(BaseModel):
+        text: str = Field(description="Some text to echo")
+
+    @tr.register_tool(
+        name="echo",
+        description="Echo a message",
+        tool_type=ToolType.FUNCTION,
+        examples=["Echo 'Hello, world!'"] ,
+        params_model=_EchoParams,
+    )
+    def _echo_tool(text: str) -> str:  # noqa: D401
+        return f"Echoed: {text}"
+
+    # ---- run the test ----
+    yield
+
+    # 3) Clean up again for safety (important if other files run after this one)
+    tr.TOOL_REGISTRY.clear()
+
+
+def test_registration():
+    "Test that a tool correctly gets registered"
+    assert "echo" in TOOL_REGISTRY
+    schema = TOOL_REGISTRY["echo"]["schema"]
+    assert schema.name == "echo"
+    assert schema.description == "Echo a message"
+    assert schema.type == ToolType.FUNCTION
+    assert schema.parameters.properties == {"text": {"type": "string", "description": "Some text to echo", "title": "Text"}}
+    assert schema.parameters.required == ["text"]
+    assert schema.examples == ["Echo 'Hello, world!'"]
+
+
+def test_convert_tool_registry_to_response_format():
+    """Test that the tool registry is converted to the correct format"""
+    response_tools = ToolRegistry.convert_tool_registry_to_response_format()
+    assert response_tools == [
+        {
+            "type": "function",
+            "name": "echo",
+            "description": "Echo a message",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string", "description": "Some text to echo", "title": "Text"}},
+                "required": ["text"]
+            }
+        }
+    ]
+
+
+def test_convert_tool_registry_to_chat_completions_format():
+    """Test that the tool registry is converted to the correct format"""
+    chat_completions_tools = ToolRegistry.convert_tool_registry_to_chat_completions_format()
+    assert chat_completions_tools == [
+        {
+            "type": "function",
+            "function": {
+                "name": "echo",
+                "description": "Echo a message",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"text": {"type": "string", "description": "Some text to echo", "title": "Text"}},
+                    "required": ["text"]
+                }
+            }
+        }
+    ]
+
+def test_execute_tool_call_valid_tool():
+    """Test that the tool registry is executed correctly"""
+    result = ToolRegistry.execute_tool_call("echo", {"text": "Hello, world!"})
+    assert result == "Echoed: Hello, world!"
+
+def test_execute_tool_call_invalid_tool():
+    """Test that the tool registry is executed correctly"""
+    with pytest.raises(ValueError):
+        ToolRegistry.execute_tool_call("invalid_tool", {"text": "Hello, world!"})
