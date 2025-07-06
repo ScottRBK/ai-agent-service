@@ -6,11 +6,12 @@ interacts with the API correctly and handles various scenarios.
 """
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch, call
 from app.core.providers.ollama import OllamaProvider
 from app.models.providers import OllamaConfig
-
-
+from app.core.tools.function_calls.date_tool import DateTool
+from datetime import datetime
+from ollama import ChatResponse, Message
 
 @pytest.fixture
 def mock_config():
@@ -89,11 +90,13 @@ async def test_cleanup_noop(mock_ollama_provider, mock_config):
 @pytest.mark.asyncio
 async def test_send_chat_returns_response(mock_ollama_client, mock_config):
     mock_client = MagicMock()
-    mock_response = MagicMock()
-    # Simulate the response structure returned by the actual chat method
-    mock_response.__getitem__.side_effect = lambda key: {"message": {"content": "Hello, world!"}}[key]
-    mock_client.chat = AsyncMock(return_value=mock_response)
     mock_ollama_client.return_value = mock_client
+    mock_response = MagicMock()
+    mock_message = MagicMock()
+    mock_message.content = "Hello, world!"
+    mock_message.tool_calls = []
+    mock_response.message = mock_message
+    mock_client.chat = AsyncMock(return_value=mock_response)
 
     provider = OllamaProvider(mock_config)
     await provider.initialize()
@@ -105,7 +108,7 @@ async def test_send_chat_returns_response(mock_ollama_client, mock_config):
     # The Ollama chat API expects a list of messages, not 'instructions'
     mock_client.chat.assert_called_once_with(
         model="llama3.1:8b",
-        messages=[{"role": "user", "content": "hi"}]
+        messages=[{"role": "user", "content": "hi"}],
+        tools=None
     )
     assert result == "Hello, world!"
-

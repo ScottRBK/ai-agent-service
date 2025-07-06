@@ -12,11 +12,20 @@ async def main():
     provider = AzureOpenAIProviderCC(AzureOpenAIConfig())
     await provider.initialize()
     model = provider.config.default_model
-    print(provider.config)
+    health = await provider.health_check()
+ 
 
 
+    instructions = """You are the bat computer, helping batman fight crime in Gotham City!
+    please respond only send responses as the bat computer
+    
+    The objective of the interaction is to provide a riddle for the user to solve. 
 
-    instructions = "You are a helpful assistant. Please respond to the user's input."
+    The riddle should be a simple one, one that a five year old can solve.
+
+    The user you are interacting with is batman
+    Response with language a five year old can read
+    """
     context = []
     message = await asyncio.to_thread(input, "You:")
     

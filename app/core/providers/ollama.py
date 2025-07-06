@@ -1,11 +1,15 @@
 import importlib.metadata
-from app.core.providers.base import BaseProvider
+import json
+from app.core.providers.base import BaseProvider, ProviderMaxToolIterationsError
 from app.models.health import HealthStatus
 from app.models.providers import OllamaConfig
-from app.models.tools import Tool
+from app.models.tools.tools import Tool
+from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
+from pydantic import ValidationError
 from app.utils.logging import logger
-from ollama import AsyncClient
+from ollama import AsyncClient, ChatResponse, Message
 from datetime import datetime
+from typing import Sequence
 
 class OllamaProvider(BaseProvider):
     def __init__(self, config: OllamaConfig):
@@ -36,9 +40,11 @@ class OllamaProvider(BaseProvider):
         """Check the health of the provider."""     
         try:
             await self.client.list()
-            return HealthStatus(status="healthy", timestamp=datetime.now(), service=self.config.name, version=self.version)
+            return HealthStatus(status="healthy", timestamp=datetime.now(), service=self.config.name, 
+                                version=self.version)
         except Exception as e:
-            return HealthStatus(status="unhealthy", timestamp=datetime.now(), service=self.config.name, version=self.version, error_details=str(e))
+            return HealthStatus(status="unhealthy", timestamp=datetime.now(), service=self.config.name, 
+                                version=self.version, error_details=str(e))
 
     async def cleanup(self) -> None:
         """Cleanup resources"""
@@ -53,27 +59,73 @@ class OllamaProvider(BaseProvider):
         """Get a list of available models."""
         return self.config.model_list
 
-    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None) -> str:
+    async def send_chat(self, context: list, model: str, 
+                        instructions: str, tools: list[Tool] = None, 
+                        available_functions: dict[str, str] = None) -> str:
         """Send input to the provider and return the response."""
         messages = []
+
+        logger.debug(f"OllamaProvider - send_chat - model: {model}")
+        logger.debug(f"OllamaProvider - send_chat - instructions: {instructions}")
+        logger.debug(f"OllamaProvider - send_chat - context: {context}")
+        logger.debug(f"OllamaProvider - send_chat - tools: {tools}")
+        logger.debug(f"OllamaProvider - send_chat - self.client: {self.config.base_url}")
 
         if instructions:
             messages.append({"role": "system", "content": instructions})
 
+        registered_tools = None
+
+        if tools:
+            tools_list = ToolRegistry.convert_tool_registry_to_chat_completions_format()
+            registered_tools = [tool for tool in tools_list if tool["function"]["name"] in tools]
+            logger.debug(f"OllamaProvider - send_chat - registered tools: {registered_tools}")
+
         messages.extend(context)
 
-        response = await self.client.chat(
+        response: ChatResponse = await self.client.chat(
             model=model,
             messages=messages,
+            tools=registered_tools
         )
-
         await self.record_successful_call()
-
         logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
-                      Total: {self.total_requests} 
-                      /n response: {response.model_dump_json(indent=2)}""")
+                        Total: {self.total_requests}
+                        /n messages: {messages}
+                        /n response: {response.message.content}""")
+        total_tool_iterations = 0
+        for _ in range(self.max_tool_iterations):
+            if response.message.tool_calls:
+                messages.append(response.message)
 
-        return response['message']['content']
+                logger.debug(f"OllamaProvider - send_chat - tool_calls: {response.message.tool_calls}")
+
+                for tool_call in response.message.tool_calls:
+                    tool_result = ToolRegistry.execute_tool_call(tool_call.function.name, tool_call.function.arguments)
+                    messages.append({
+                        "role": "tool",
+                        "content": str(tool_result)
+                    })
+
+                response: ChatResponse = await self.client.chat(
+                    model=model,
+                    messages=messages,
+                    tools=registered_tools
+                )
+                await self.record_successful_call()
+                logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
+                        Total: {self.total_requests}
+                        /n messages: {messages}
+                        /n response: {response.message.content}""")
+                total_tool_iterations += 1
+            else:
+                break
+        if total_tool_iterations >= self.max_tool_iterations:
+            logger.error(f"""OllamaProvider - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
+            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+
+        logger.debug(f"""OllamaProvider - send_chat - completed Total Requests: {self.total_requests}""")
+        return response.message.content
     
     async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None) -> str:
         """Stream input to the provider and yield the response."""

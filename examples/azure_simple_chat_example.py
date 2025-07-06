@@ -5,15 +5,19 @@ import asyncio
 import app.main
 from app.models.providers import ProviderConfig, AzureOpenAIConfig
 from app.core.providers.azureopenapi import AzureOpenAIProvider
-
+from app.utils.logging import logger
+from app.config.settings import settings
 
 async def main():
 
     provider = AzureOpenAIProvider(AzureOpenAIConfig())
     await provider.initialize()
-    print(provider.config)
-
-
+    logger.debug(f"Settings: {settings.AZURE_OPENAI_BASE_URL}")
+    logger.debug(f"Provider Config: {provider.config}")
+    model = provider.config.default_model
+    health = await provider.health_check()
+    logger.debug(f"Health: {health}")
+    logger.debug(f"Provider Config: {provider.config}")    
 
     instructions = "You are a helpful assistant. Please respond to the user's input."
     context = []

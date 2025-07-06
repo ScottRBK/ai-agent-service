@@ -92,6 +92,7 @@ async def test_send_chat_returns_response(mock_azure_openai, mock_config):
     
     mock_choice = MagicMock()
     mock_choice.message = mock_message
+    mock_message.tool_calls = []
     
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
@@ -111,12 +112,13 @@ async def test_send_chat_returns_response(mock_azure_openai, mock_config):
     )
     
     assert result == "Hello, world!"
-    mock_client.chat.completions.create.assert_called_once_with(
+    mock_client.chat.completions.create.assert_awaited_with(
         model="gpt-35-turbo",
         messages=[
             {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": "hi"}
-        ]
+            {"role": "user", "content": "hi"},
+        ],
+        tools=None
     )
 
 @patch("app.core.providers.azureopenapi_cc.AsyncAzureOpenAI")
@@ -130,6 +132,7 @@ async def test_send_chat_without_instructions(mock_azure_openai, mock_config):
     
     mock_choice = MagicMock()
     mock_choice.message = mock_message
+    mock_message.tool_calls = []
     
     mock_response = MagicMock()
     mock_response.choices = [mock_choice]
@@ -153,5 +156,6 @@ async def test_send_chat_without_instructions(mock_azure_openai, mock_config):
         model="gpt-4",
         messages=[
             {"role": "user", "content": "hello"}
-        ]
+        ],
+        tools=None
     ) 

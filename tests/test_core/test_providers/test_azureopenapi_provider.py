@@ -36,8 +36,8 @@ async def test_initialization(mock_azure_openai, mock_config):
 @patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
 @pytest.mark.asyncio
 async def test_health_check_healthy(mock_azure_openai, mock_config):
-    mock_client = MagicMock()
-    mock_client.responses.create = AsyncMock(return_value=MagicMock())
+    mock_client = AsyncMock()
+    mock_client.models.list = AsyncMock(return_value=["gpt-35-turbo", "gpt-4"])
     mock_azure_openai.return_value = mock_client
     provider = AzureOpenAIProvider(mock_config)
     await provider.initialize()
@@ -51,8 +51,8 @@ async def test_health_check_healthy(mock_azure_openai, mock_config):
 @patch("app.core.providers.azureopenapi.AsyncAzureOpenAI")
 @pytest.mark.asyncio
 async def test_health_check_unhealthy(mock_azure_openai, mock_config):
-    mock_client = MagicMock()
-    mock_client.responses.create = AsyncMock(side_effect=Exception("Test error"))
+    mock_client = AsyncMock()
+    mock_client.models.list = AsyncMock(side_effect=Exception("Test error"))
     mock_azure_openai.return_value = mock_client
     provider = AzureOpenAIProvider(mock_config)
     await provider.initialize()
@@ -130,6 +130,7 @@ async def test_send_chat_returns_response(mock_azure_openai, mock_config):
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.output_text = "Hello, world!"
+    mock_response.output.type = "message"
     mock_client.responses.create = AsyncMock(return_value=mock_response)
     mock_azure_openai.return_value = mock_client
 
@@ -137,12 +138,12 @@ async def test_send_chat_returns_response(mock_azure_openai, mock_config):
     await provider.initialize()
     result = await provider.send_chat(model="gpt-35-turbo", 
                                       instructions="instructions", 
-                                      context="hi", tools=[])
+                                      context="hi", tools=None)
     assert result == "Hello, world!"
     mock_client.responses.create.assert_called_once_with(
         model="gpt-35-turbo",
         instructions="instructions",
         input="hi",
-        tools=[]
+        tools=None
     )
 

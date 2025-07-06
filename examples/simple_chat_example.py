@@ -4,6 +4,8 @@ This example shows how to use the AzureOpenAIProvider to send a message to the A
 import asyncio
 import app.main
 import questionary
+from app.core.tools.function_calls.date_tool import DateTool
+from app.core.tools.function_calls.arithmetic_tool import ArithmeticTool
 from app.core.providers.manager import ProviderManager
 from app.utils.logging import logger
 
@@ -61,8 +63,13 @@ async def main():
         print(f"No model selected. Using default model {provider.config.default_model}.")
   
     instructions = "You are a helpful assistant. Please respond to the user's input."
+    # tools = [DateTool.get_current_datetime_json_schema()]
+    # available_functions = {"get_current_datetime": DateTool.get_current_datetime}
+
     context = []
     message = await asyncio.to_thread(input, "You:")
+
+    tools = ["get_current_datetime"]
     
     context.append({"role": "user", "content": message})
 
@@ -71,7 +78,8 @@ async def main():
             model=model,
             instructions=instructions,
             context=context,
-            tools=[]
+            tools=tools,
+            # available_functions=available_functions
         )
         await asyncio.to_thread(print, f"\n\033[31m{provider.name}: \033[32m{response}\n")
         context.append({"role": "assistant", "content": response})

@@ -7,7 +7,7 @@ from typing import Optional
 from datetime import datetime
 
 from app.models.providers import ProviderConfig
-from app.models.tools import Tool
+from app.models.tools.tools import Tool
 from app.models.health import HealthStatus
 
 class ProviderError(Exception):
@@ -38,6 +38,9 @@ class ProviderModelNotFoundError(ProviderError):
     """Raised when requested model is not available."""
     pass
 
+class ProviderMaxToolIterationsError(ProviderError):
+    """Raised when max tool iterations is reached."""
+    pass
 
 class BaseProvider(ABC):
     """Abstract base class for all LLM providers."""
@@ -52,6 +55,7 @@ class BaseProvider(ABC):
         self.last_successful_call: Optional[datetime] = None
         self.last_error: Optional[ProviderError] = None
         self.error_count = 0
+        self.max_tool_iterations = 10
 
         self.client = None
         self.initialized = False

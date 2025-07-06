@@ -35,7 +35,7 @@ async def test_provider_if_healthy(provider_id):
             instructions="Be brief",
             tools=[]
         )
-        
+        print(response)
         assert isinstance(response, str)
         assert len(response) > 0
         
