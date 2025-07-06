@@ -1,10 +1,10 @@
 """
 Date Tool for working with dates and times
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 import zoneinfo
 from app.core.tools.tool_registry import register_tool
-from app.models.tools.date import DateTool as DateToolModel
+from app.models.tools.date import CurrentDateTool as CurrentDateToolModel
 from pydantic import BaseModel, Field
 from app.models.tools.tools import Tool, ToolType
 
@@ -34,6 +34,6 @@ class DateTool:
             return datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
         except Exception as e:
             return f"Error: Invalid timezone '{timezone}'. Please use a valid timezone name like 'Asia/Tokyo' or 'UTC'."
-
+    
 
 
