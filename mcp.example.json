@@ -1,0 +1,20 @@
+//example mcp.json file - rename to mcp.json
+//TODO: add the Authorization header from environment variable
+[
+    {
+        "server_label": "deepwiki",
+        "server_url": "https://mcp.deepwiki.com/mcp",
+        "require_approval": "never",
+        "header": {
+            "Authorization": ""
+        }
+    },
+    {
+        "server_label": "open-weather",
+        "server_url": "https://mcp.open-mcp.org/api/server/open-weather@latest/mcp",
+        "require_approval": "never",
+        "header": {
+            "Authorization": ""
+        }
+    }
+]

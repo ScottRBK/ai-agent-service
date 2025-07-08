@@ -5,8 +5,6 @@ from enum import Enum
 class ToolType(str, Enum):
     """Enum for tool types."""
     FUNCTION = "function"
-    MCP = "mcp"
-
 class ToolParameters(BaseModel):
     """Base class for all tool parameters."""
     type: str = "object"

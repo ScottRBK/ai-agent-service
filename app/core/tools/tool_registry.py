@@ -5,11 +5,13 @@ It is also used to execute the tool calls.
 """
 
 import json
+from app.models.tools.tools import Tool, ToolParameters
+from app.models.tools.mcp import MCP
+from app.utils.logging import logger
 from typing import Callable, Dict, Any, Type
 from pydantic import BaseModel
-from app.models.tools.tools import Tool, ToolParameters
 from pydantic import ValidationError
-from app.utils.logging import logger
+from mcp.types import Tool as MCPTool
 
 TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
@@ -41,6 +43,41 @@ def register_tool(
     return decorator
 
 class ToolRegistry:
+    """
+    Tool Registry is a registry of tools that can be used by the agent.
+    It is used to convert the tool registry to the different formats that are supported by the different providers.
+    It is also used to execute the tool calls.
+    """
+
+    @staticmethod
+    def load_mcp_servers() -> list[MCP]:
+        """
+        Loads the MCP servers from the mcp.json file.
+        """
+        try:
+            with open("mcp.json", "r") as f:
+                mcp_data = json.load(f)
+            
+            if isinstance(mcp_data, dict):
+                mcp_servers = [mcp_data]
+            elif isinstance(mcp_data, list):
+                mcp_servers = mcp_data
+            else:
+                logger.error(f"Invalid mcp.json format: expected dict or list, got {type(mcp_data)}")
+                return []
+            
+            return [MCP(**server) for server in mcp_servers]
+        
+        except FileNotFoundError:
+            logger.error("mcp.json file not found")
+            return []
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in mcp.json: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Error loading MCP servers: {e}")
+            return []
+
     @staticmethod
     def convert_tool_registry_to_response_format() -> list[dict]:
         """
@@ -84,7 +121,7 @@ class ToolRegistry:
         for tool_name, tool_entry in TOOL_REGISTRY.items():
             tool_schema = tool_entry["schema"]
             
-            # Convert to Azure OpenAI format
+            
             cc_tool = {
                 "type": "function",
                 "function": {
@@ -117,5 +154,21 @@ class ToolRegistry:
             raise ValueError(f"Argument validation error: {e}")
 
         return implementation(**validated_args.model_dump())
-        
-
+    
+    @staticmethod
+    def convert_mcp_tools_to_chatcompletions(mcp_tools: list[MCPTool]) -> list[dict[str, Any]]:
+        """
+        Converts a list of MCPTool objects to a list of dictionaries
+        in the format expected by the Chat Completions Model.
+        """
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description or f"Tool: {tool.name}",
+                    "parameters": tool.inputSchema,
+                },
+            }
+            for tool in mcp_tools
+        ]

@@ -1,7 +1,7 @@
 """
 Date Tool for working with dates and times
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 import zoneinfo
 from app.core.tools.tool_registry import register_tool
 from app.models.tools.date import CurrentDateTool as CurrentDateToolModel

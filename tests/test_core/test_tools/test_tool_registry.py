@@ -1,5 +1,7 @@
 import importlib
 import pytest
+import json
+from unittest.mock import patch, mock_open
 from pydantic import BaseModel, Field
 from app.core.tools.tool_registry import register_tool, ToolRegistry, TOOL_REGISTRY
 from app.models.tools.tools import ToolType
@@ -33,6 +35,31 @@ def clean_tool_registry():
 
     # 3) Clean up again for safety (important if other files run after this one)
     tr.TOOL_REGISTRY.clear()
+
+
+@pytest.fixture
+def mock_mcp_servers_data():
+    """Mock MCP servers data for testing"""
+    return [
+        {
+            "type": "mcp",
+            "server_label": "example_mcp_server",
+            "server_url": "https://example_mcp_server/mcp",
+            "require_approval": "never",
+            "header": {
+                "Authorization": ""
+            }
+        },
+        {
+            "type": "mcp",
+            "server_label": "another_mcp_server",
+            "server_url": "https://another_mcp_server/mcp",
+            "require_approval": "always",
+            "header": {
+                "Authorization": "Bearer token123"
+            }
+        }
+    ]
 
 
 def test_registration():
@@ -91,3 +118,19 @@ def test_execute_tool_call_invalid_tool():
     """Test that the tool registry is executed correctly"""
     with pytest.raises(ValueError):
         ToolRegistry.execute_tool_call("invalid_tool", {"text": "Hello, world!"})
+
+@patch('builtins.open', new_callable=mock_open)
+def test_load_mcp_servers_with_mock_open(mock_file, mock_mcp_servers_data):
+    """Test loading MCP servers using mock_open"""
+    mock_file.return_value.read.return_value = json.dumps(mock_mcp_servers_data)
+    
+    mcp_servers = ToolRegistry.load_mcp_servers()
+    
+    mock_file.assert_called_once_with("mcp.json", "r")
+    
+    assert len(mcp_servers) == 2
+    assert mcp_servers[0].server_label == "example_mcp_server"
+    assert mcp_servers[1].server_label == "another_mcp_server"
+
+
+
