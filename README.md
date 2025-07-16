@@ -10,6 +10,7 @@ A modern, intelligent AI Agent Service built with FastAPI that provides automate
 - **Multi-Provider AI Support** - Azure OpenAI, Ollama with unified interface
 - **MCP Integration** - Model Context Protocol for external tools
 - **Tool Filtering** - Agent-specific permissions and authorization
+- **Prompt Management** - Dynamic system prompts with tool integration
 - **Docker Support** - Multi-stage builds with development and production targets 
 - **Environment Configuration** - Flexible settings with environment variable support
 - **Structured Logging** - Comprehensive logging setup for debugging and monitoring
@@ -66,6 +67,7 @@ ai-agent-service/
 │   ├── core/
 │   │   ├── agents/
 │   │   │   └── agent_tool_manager.py    # Agent tool filtering
+│   │   │   └── prompt_manager.py        # System prompt management
 │   │   ├── providers/
 │   │   │   ├── base.py                  # Base provider interface
 │   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API)
@@ -84,7 +86,8 @@ ai-agent-service/
 │   │   └── test_tools/                  # Tool tests
 │   └── test_integration/                # End-to-end tests
 ├── agent_config.json                    # Agent configurations
-├── mcp.json                            # MCP server config
+├── prompts/                             # System Prompt Files per agent
+├── mcp.json                             # MCP server config
 └── requirements.txt
 ```
 
@@ -163,6 +166,7 @@ Configure agent-specific tool access via `agent_config.json`:
 [
   {
     "agent_id": "research_agent",
+    "system_prompt_file": "prompts/research_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
     "allowed_mcp_servers": ["deepwiki", "fetch"],
     "allowed_mcp_tools": {
@@ -183,6 +187,16 @@ I have included two example MCP servers for examples
 - **Agent-specific permissions** - Control which tools each agent can access
 - **Regular tools** - Built-in functions like date/time, arithmetic, these are both just very basic examples 
 - **MCP tools** - External server capabilities with proper authorization
+
+### System Prompt Management
+The service includes a flexible prompt management system:
+
+- **External prompt files** - Store prompts in `prompts/` directory
+- **Inline prompts** - Define prompts directly in agent config
+- **Tool integration** - Automatically include available tools in system prompts
+- **Fallback prompts** - Default prompts when no configuration is found
+
+#### Prompt File Example (`prompts/research_agent.txt`):
 
 ## Provider Support
 
@@ -269,7 +283,6 @@ Agents are configured in `agent_config.json`:
   }
 ]
 ```
-
 ### Troubleshooting
 
 **Agent not found:**
@@ -284,11 +297,17 @@ Agents are configured in `agent_config.json`:
 - Verify MCP servers are running (for MCP tools)
 - Check tool permissions in agent configuration
 
+**Prompt issues:**
+- Verify prompt files exist in `prompts/` directory
+- Check file permissions and encoding (UTF-8)
+- Ensure prompt files are not empty
+
 ## 🧪 Testing
 
 ### Test Coverage
-- **75+ tests** including unit and integration tests
+- **103+ tests** including unit and integration tests
 - **Agent tool filtering** - Comprehensive permission testing
+- **Prompt management** - System prompt loading and integration
 - **MCP integration** - End-to-end tool execution
 - **Provider compatibility** - All providers tested
 
@@ -310,6 +329,9 @@ pytest tests/ --cov=app --cov-report=html
 # Test agent tool filtering
 pytest tests/test_integration/test_agent_tool_filtering_integration.py
 
+# Test prompt management
+pytest tests/test_integration/test_prompt_management_integration.py
+
 # Test MCP integration
 pytest tests/test_integration/test_basic_chat_agent_integration.py
 ```
@@ -322,27 +344,49 @@ pytest tests/test_integration/test_basic_chat_agent_integration.py
 2. Define your Pydantic models in `app/models/`
 3. Include the router in `app/main.py`
 
-Example:
-### Using Agents with MCP Tools
+### Using Agents with Prompt Management
 
 ```python
 from app.core.agents.agent_tool_manager import AgentToolManager
+from app.core.agents.prompt_manager import PromptManager
 from app.core.providers.manager import ProviderManager
 
-# Create agent with specific tool access
+# Create agent with prompt management
 agent_manager = AgentToolManager("research_agent")
+prompt_manager = PromptManager("research_agent")
 
-# Get available tools (regular + MCP)
+# Get available tools and system prompt
 tools = await agent_manager.get_available_tools()
+system_prompt = prompt_manager.get_system_prompt_with_tools(tools)
 
 # Use with any provider
 provider = ProviderManager().get_provider("azure_openai_cc")
 response = await provider.send_chat(
     context=[{"role": "user", "content": "What's the current time?"}],
     model="gpt-4",
-    instructions="You are a helpful assistant.",
+    instructions=system_prompt,
     agent_id="research_agent"
 )
+```
+
+### Creating Custom Agents
+
+1. **Add agent configuration** to `agent_config.json`
+2. **Create prompt file** in `prompts/` directory (optional)
+3. **Define tool permissions** for the agent
+4. **Test the agent** using the run script
+
+Example:
+```json
+{
+  "agent_id": "custom_agent",
+  "system_prompt_file": "prompts/custom_agent.txt",
+  "allowed_regular_tools": ["get_current_datetime", "add_two_numbers"],
+  "allowed_mcp_servers": ["deepwiki"],
+  "allowed_mcp_tools": {
+    "deepwiki": ["search_wiki"]
+  }
+}
 ```
 
 ### Hot Reload

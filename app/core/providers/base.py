@@ -62,6 +62,7 @@ class BaseProvider(ABC):
 
         self.client = None
         self.initialized = False
+        self.cached_tools = {}  # Cache tools per agent_id
 
     @abstractmethod 
     async def health_check(self) -> HealthStatus:
@@ -97,11 +98,18 @@ class BaseProvider(ABC):
     async def get_available_tools(self, agent_id: str = None, requested_tools: list[Tool] = None) -> list[dict]:
         """
         Get available tools for the agent, combining regular tools and MCP tools.
+        Caches tools per agent_id to avoid repeated MCP server calls.
         """
         if agent_id:
+            # Check cache first
+            if agent_id in self.cached_tools:
+                return self.cached_tools[agent_id]
+            
+            # Load and cache tools
             agent_manager = AgentToolManager(agent_id)
             tools = await agent_manager.get_available_tools()
-            return tools if tools else None
+            self.cached_tools[agent_id] = tools if tools else None
+            return self.cached_tools[agent_id]
         elif requested_tools:
             tools_list = ToolRegistry.convert_tool_registry_to_chat_completions_format()
             tools = [tool for tool in tools_list if tool["function"]["name"] in requested_tools]

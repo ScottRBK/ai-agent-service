@@ -5,6 +5,7 @@ from app.core.providers.manager import ProviderManager
 from app.core.providers.base import ProviderMaxToolIterationsError
 from app.models.health import HealthStatus
 from app.core.agents.agent_tool_manager import AgentToolManager
+from app.core.agents.prompt_manager import PromptManager
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
@@ -28,19 +29,16 @@ async def test_research_agent_tool_filtering(provider_id, caplog):
         # Test research_agent - should have access to datetime + deepwiki/fetch tools
         agent_id = "research_agent"
         
-        instructions = """
-                        You are a research assistant. You have access to:
-                        - get_current_datetime: Get current date/time
-                        - deepwiki tools: Search and read wiki content
-                        - fetch tools: Fetch web content
-                        
-                        Use the appropriate tools when asked.
-                        """
+        # Use PromptManager instead of hardcoded instructions
+        prompt_manager = PromptManager(agent_id)
+        agent_tool_manager = AgentToolManager(agent_id)
+        available_tools = await agent_tool_manager.get_available_tools()
+        system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
         
         response = await provider.send_chat(
             context=[{"role": "user", "content": "What is the current time and can you search for information about Python programming?"}],
             model=config.default_model,
-            instructions=instructions,
+            instructions=system_prompt,
             tools=None,
             agent_id=agent_id
         )
@@ -78,18 +76,16 @@ async def test_restricted_agent_tool_filtering(provider_id, caplog):
         # Test restricted_agent - should only have datetime + limited deepwiki access
         agent_id = "restricted_agent"
         
-        instructions = """
-                        You are a restricted assistant. You have access to:
-                        - get_current_datetime: Get current date/time
-                        - deepwiki read_wiki_structure: Read wiki structure only
-                        
-                        Use the appropriate tools when asked.
-                        """
+        # Use PromptManager instead of hardcoded instructions
+        prompt_manager = PromptManager(agent_id)
+        agent_tool_manager = AgentToolManager(agent_id)
+        available_tools = await agent_tool_manager.get_available_tools()
+        system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
         
         response = await provider.send_chat(
             context=[{"role": "user", "content": "What is the current time and can you read the structure of the Python wiki?"}],
             model=config.default_model,
-            instructions=instructions,
+            instructions=system_prompt,
             tools=None,
             agent_id=agent_id
         )
@@ -124,18 +120,16 @@ async def test_mcp_agent_tool_filtering(provider_id, caplog):
         # Test mcp_agent - should have access to all MCP tools but no regular tools
         agent_id = "mcp_agent"
         
-        instructions = """
-                        You are an MCP-only assistant. You have access to:
-                        - deepwiki tools: Search and read wiki content
-                        - fetch tools: Fetch web content
-                        
-                        Use the appropriate tools when asked.
-                        """
+        # Use PromptManager instead of hardcoded instructions
+        prompt_manager = PromptManager(agent_id)
+        agent_tool_manager = AgentToolManager(agent_id)
+        available_tools = await agent_tool_manager.get_available_tools()
+        system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
         
         response = await provider.send_chat(
             context=[{"role": "user", "content": "Can you search for information about Python programming and fetch some web content?"}],
             model=config.default_model,
-            instructions=instructions,
+            instructions=system_prompt,
             tools=None,
             agent_id=agent_id
         )
@@ -170,18 +164,16 @@ async def test_regular_tools_only_agent_filtering(provider_id, caplog):
         # Test regular_tools_only_agent - should have access to regular tools only
         agent_id = "regular_tools_only_agent"
         
-        instructions = """
-                        You are a regular tools assistant. You have access to:
-                        - get_current_datetime: Get current date/time
-                        - add_two_numbers: Add two numbers
-                        
-                        Use the appropriate tools when asked.
-                        """
+        # Use PromptManager instead of hardcoded instructions
+        prompt_manager = PromptManager(agent_id)
+        agent_tool_manager = AgentToolManager(agent_id)
+        available_tools = await agent_tool_manager.get_available_tools()
+        system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
         
         response = await provider.send_chat(
             context=[{"role": "user", "content": "What is the current time and what is 5 + 7?"}],
             model=config.default_model,
-            instructions=instructions,
+            instructions=system_prompt,
             tools=None,
             agent_id=agent_id
         )
@@ -271,20 +263,17 @@ async def test_provider_tool_integration_bad_tools(provider_id):
         # Test with an agent that only has access to datetime tool
         agent_id = "regular_tools_only_agent"
         
-        instructions = """
-                        You are a helpful assistant that can use tools to answer questions.
-                        You can use the following tools:
-                        - get_current_datetime: Get the current date and time
-
-                        When you are asked to use a tool, you must use it, providing it is available to you.
-                        You must not use a tool if you are not asked to.
-                        """
+        # Use PromptManager instead of hardcoded instructions
+        prompt_manager = PromptManager(agent_id)
+        agent_tool_manager = AgentToolManager(agent_id)
+        available_tools = await agent_tool_manager.get_available_tools()
+        system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
         
         try:
             response = await provider.send_chat(
                 context=[{"role": "user", "content": "What is 6000+12312 please use the add_two_numbers tool and also what is the current date and time in Tokyo?"}],
                 model=config.default_model,
-                instructions=instructions,
+                instructions=system_prompt,
                 tools=None,  # Let agent manager handle tool selection
                 agent_id=agent_id
             )

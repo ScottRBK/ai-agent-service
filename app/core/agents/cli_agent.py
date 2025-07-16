@@ -6,6 +6,7 @@ import asyncio
 from typing import Optional
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.providers.manager import ProviderManager
+from app.core.agents.prompt_manager import PromptManager
 from app.utils.logging import logger
 
 
@@ -19,6 +20,7 @@ class CLIAgent:
         self.provider_id = provider_id
         self.tool_manager = AgentToolManager(agent_id)
         self.provider_manager = ProviderManager()
+        self.prompt_manager = PromptManager(agent_id)
         self.provider = None
         self.conversation_history = []
         self.initialized = False
@@ -35,8 +37,10 @@ class CLIAgent:
         await self.provider.initialize()
         
         # Verify agent has access to tools
-        available_tools = await self.tool_manager.get_available_tools()
-        logger.info(f"Agent {self.agent_id} initialized with {len(available_tools)} tools")
+        self.available_tools = await self.tool_manager.get_available_tools()
+        logger.info(f"Agent {self.agent_id} initialized with {len(self.available_tools)} tools")
+
+        self.system_prompt = self.prompt_manager.get_system_prompt_with_tools(self.available_tools)
         
         self.initialized = True
     
@@ -52,7 +56,7 @@ class CLIAgent:
         response = await self.provider.send_chat(
             context=self.conversation_history,
             model=self.provider.config.default_model,
-            instructions="You are a helpful AI assistant. Use available tools when needed to provide accurate and helpful responses.",
+            instructions=self.system_prompt,
             agent_id=self.agent_id
         )
         
@@ -66,7 +70,8 @@ class CLIAgent:
         await self.initialize()
         
         print(f"🤖 {self.agent_id} Agent Ready!")
-        print(f"🛠️ Available tools: {len(await self.tool_manager.get_available_tools())}")
+        print(f"🛠️ Available tools: {len(self.available_tools)}")
+        print(f"📝 System prompt: {self.prompt_manager.get_system_prompt()[:50]}...")
         print("💬 Type 'quit' to exit\n")
         
         while True:

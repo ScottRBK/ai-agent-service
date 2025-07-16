@@ -1,6 +1,7 @@
 [
   {
     "agent_id": "research_agent",
+    "system_prompt_file": "prompts/research_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
     "allowed_mcp_servers": ["deepwiki", "fetch"],
     "allowed_mcp_tools": {
@@ -11,6 +12,7 @@
   },
   {
     "agent_id": "restricted_agent",
+    "system_prompt_file": "prompts/restricted_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
     "allowed_mcp_servers": ["deepwiki"],
     "allowed_mcp_tools": {
@@ -20,6 +22,7 @@
   },
   {
     "agent_id": "mcp_agent",
+    "system_prompt_file": "prompts/mcp_agent.txt",
     "allowed_regular_tools": [],
     "allowed_mcp_servers": ["deepwiki", "fetch"],
     "allowed_mcp_tools": null,
@@ -27,6 +30,7 @@
   },
   {
     "agent_id": "regular_tools_only_agent",
+    "system_prompt_file": "prompts/regular_tools_only_agent.txt",
     "allowed_regular_tools": ["get_current_datetime", "add_two_numbers"],
     "allowed_mcp_servers": [],
     "allowed_mcp_tools": {},
@@ -34,6 +38,7 @@
   },
   {
     "agent_id": "cli_agent",
+    "system_prompt_file": "prompts/cli_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
     "allowed_mcp_servers": null,
     "allowed_mcp_tools": null,
