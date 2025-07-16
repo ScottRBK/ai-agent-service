@@ -156,16 +156,18 @@ class ToolRegistry:
         return implementation(**validated_args.model_dump())
     
     @staticmethod
-    def convert_mcp_tools_to_chatcompletions(mcp_tools: list[MCPTool]) -> list[dict[str, Any]]:
+    def convert_mcp_tools_to_chatcompletions(mcp_server_label: str, mcp_tools: list[MCPTool]) -> list[dict[str, Any]]:
         """
         Converts a list of MCPTool objects to a list of dictionaries
         in the format expected by the Chat Completions Model.
         """
+        # Use a more unique separator to avoid conflicts with tool names
+        separator = "__"
         return [
             {
                 "type": "function",
                 "function": {
-                    "name": tool.name,
+                    "name": f"{mcp_server_label}{separator}{tool.name}",
                     "description": tool.description or f"Tool: {tool.name}",
                     "parameters": tool.inputSchema,
                 },

@@ -1,0 +1,35 @@
+[
+  {
+    "agent_id": "research_agent",
+    "allowed_regular_tools": ["get_current_datetime"],
+    "allowed_mcp_servers": ["deepwiki", "fetch"],
+    "allowed_mcp_tools": {
+      "deepwiki": ["read_wiki_structure", "search_wiki"],
+      "fetch": ["fetch_url"]
+    },
+    "provider": "azure_openai_cc"
+  },
+  {
+    "agent_id": "restricted_agent",
+    "allowed_regular_tools": ["get_current_datetime"],
+    "allowed_mcp_servers": ["deepwiki"],
+    "allowed_mcp_tools": {
+      "deepwiki": ["read_wiki_structure"]
+    },
+    "provider": "azure_openai_cc"
+  },
+  {
+    "agent_id": "mcp_agent",
+    "allowed_regular_tools": [],
+    "allowed_mcp_servers": ["deepwiki", "fetch"],
+    "allowed_mcp_tools": null,
+    "provider": "azure_openai_cc"
+  },
+  {
+    "agent_id": "regular_tools_only_agent",
+    "allowed_regular_tools": ["get_current_datetime", "add_two_numbers"],
+    "allowed_mcp_servers": [],
+    "allowed_mcp_tools": {},
+    "provider": "azure_openai_cc"
+  }
+] 

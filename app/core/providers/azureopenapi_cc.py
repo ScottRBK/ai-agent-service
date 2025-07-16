@@ -10,6 +10,7 @@ from app.models.health import HealthStatus
 from app.models.providers import AzureOpenAIConfig
 from app.models.tools.tools import Tool
 from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
+from app.core.agents.agent_tool_manager import AgentToolManager
 from pydantic import ValidationError
 from app.utils.logging import logger
 from openai import AsyncAzureOpenAI
@@ -70,7 +71,7 @@ class AzureOpenAIProviderCC(BaseProvider):
         """Get a list of available models."""
         return self.config.model_list
 
-    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None) -> str:
+    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None) -> str:
         """Send input to the provider and return the response."""
         messages = []
 
@@ -78,24 +79,22 @@ class AzureOpenAIProviderCC(BaseProvider):
         logger.debug(f"AzureOpenAIProviderCC - send_chat - instructions: {instructions}")
         logger.debug(f"AzureOpenAIProviderCC - send_chat - context: {context}")
         logger.debug(f"AzureOpenAIProviderCC - send_chat - tools: {tools}")
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - agent_id: {agent_id}")
         logger.debug(f"AzureOpenAIProviderCC - send_chat - self.client: {self.client.base_url}")
 
         if instructions:
             messages.append({"role": "system", "content": instructions})
 
-        registered_tools = None
-        
-        if tools:
-            tools_list = ToolRegistry.convert_tool_registry_to_chat_completions_format()
-            registered_tools = [tool for tool in tools_list if tool["function"]["name"] in tools]
-            logger.debug(f"AzureOpenAIProviderCC - send_chat - registered tools: {registered_tools}")
+        # Get available tools based on agent_id
+        available_tools = await self.get_available_tools(agent_id, tools)
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - available tools: {len(available_tools) if available_tools else 0}")
 
         messages.extend(context)
 
         response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
-                tools=registered_tools
+                tools=available_tools
             )
         await self.record_successful_call()
 
@@ -114,7 +113,7 @@ class AzureOpenAIProviderCC(BaseProvider):
 
                     logger.debug(f"AzureOpenAIProviderCC - send_chat - tool_call: {tool_call}")
 
-                    tool_result = ToolRegistry.execute_tool_call(tool_call.function.name, json.loads(tool_call.function.arguments))
+                    tool_result = await self.execute_tool_call(tool_call.function.name, json.loads(tool_call.function.arguments), agent_id)
                     messages.append({
                         "role": "tool",
                         "content": str(tool_result),
@@ -125,7 +124,7 @@ class AzureOpenAIProviderCC(BaseProvider):
                 response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
-                tools=registered_tools)
+                tools=available_tools)
 
                 await self.record_successful_call()
                 
@@ -141,6 +140,7 @@ class AzureOpenAIProviderCC(BaseProvider):
         
         logger.debug(f"""AzureOpenAIProviderCC - send_chat - completed Total Requests: {self.total_requests}""")
         return response.choices[0].message.content
+
 
     async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
         """Stream input to the provider and yield the response."""

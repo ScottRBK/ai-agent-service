@@ -78,10 +78,16 @@ async def main():
             print(server_tools)
             mcp_tools.extend(server_tools)
 
-            chatcompletions_formatted_tools.extend(await convert_mcp_tools_to_chatcompletions(mcp_server_label, server_tools))
+            chatcompletions_formatted_tools.extend(ToolRegistry.convert_mcp_tools_to_chatcompletions(mcp_server_label, server_tools))
+    
+    #add the non-mcp tools to the chatcompletions_formatted_tools
+    non_mcp_tools = ["get_current_datetime"]
+    tools_list = ToolRegistry.convert_tool_registry_to_chat_completions_format()
+    registered_tools = [tool for tool in tools_list if tool["function"]["name"] in non_mcp_tools]
+    chatcompletions_formatted_tools.extend(registered_tools)
 
     messages = [{"role": "user", "content": """Hello can you tell me about the bytedance/trae-agent repo.
-    Also, can you tell me the weather in Tokyo?"""}]
+    Also, can you tell me the current date and time and and also fetch some cool mcp servers from https://mcpservers.org/remote-mcp-servers"""}]
     print(f"Sending chat completion request to {provider.config.default_model}")
     response = await send_chat_completion(client, provider, messages, chatcompletions_formatted_tools)
     
@@ -95,19 +101,29 @@ async def main():
                 # Use the same separator as in tool name creation
                 separator = "__"
                 if separator not in tool_call.function.name:
-                    raise ValueError(f"Invalid tool name format: {tool_call.function.name}")
-                
-                mcp_server_label, tool_name = tool_call.function.name.split(separator, 1)
-                mcp_server_url = servers_by_label[mcp_server_label].server_url
+                    #check to see if it is a non-mcp tool:
+                    if tool_call.function.name in non_mcp_tools:
+                        tool_result = ToolRegistry.execute_tool_call(tool_call.function.name, json.loads(tool_call.function.arguments))
+                        messages.append({
+                            "role": "tool",
+                            "content": str(tool_result),
+                            "tool_call_id": tool_call.id
+                        })
+                    else:
+                        raise ValueError(f"Invalid tool name format: {tool_call.function.name}")
+                else:
+                    
+                    mcp_server_label, tool_name = tool_call.function.name.split(separator, 1)
+                    mcp_server_url = servers_by_label[mcp_server_label].server_url
 
-                async with Client(mcp_server_url) as mcp_client:
-                    tool_result = await call_tool(mcp_client, mcp_server_label, tool_name, 
-                                                json.loads(tool_call.function.arguments))
-                messages.append({
-                    "role": "tool",
-                    "content": str(tool_result),
-                    "tool_call_id": tool_call.id
-                })
+                    async with Client(mcp_server_url) as mcp_client:
+                        tool_result = await call_tool(mcp_client, mcp_server_label, tool_name, 
+                                                    json.loads(tool_call.function.arguments))
+                    messages.append({
+                        "role": "tool",
+                        "content": str(tool_result),
+                        "tool_call_id": tool_call.id
+                    })
             
             response = await send_chat_completion(client, provider, 
                                                     messages, chatcompletions_formatted_tools)

@@ -7,11 +7,13 @@ from app.core.tools.tool_registry import register_tool, ToolRegistry, TOOL_REGIS
 from app.models.tools.tools import ToolType
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()
 def clean_tool_registry():
     """Start each test with a fresh registry that only contains the dummy echo tool."""
     import app.core.tools.tool_registry as tr
     # This was way harder than it should have been.
+
+    original_registry = dict(tr.TOOL_REGISTRY)
 
     # 1) Wipe the registry so we have a clean slate
     tr.TOOL_REGISTRY.clear()
@@ -35,6 +37,7 @@ def clean_tool_registry():
 
     # 3) Clean up again for safety (important if other files run after this one)
     tr.TOOL_REGISTRY.clear()
+    tr.TOOL_REGISTRY.update(original_registry)
 
 
 @pytest.fixture
@@ -62,7 +65,7 @@ def mock_mcp_servers_data():
     ]
 
 
-def test_registration():
+def test_registration(clean_tool_registry):
     "Test that a tool correctly gets registered"
     assert "echo" in TOOL_REGISTRY
     schema = TOOL_REGISTRY["echo"]["schema"]
@@ -74,7 +77,7 @@ def test_registration():
     assert schema.examples == ["Echo 'Hello, world!'"]
 
 
-def test_convert_tool_registry_to_response_format():
+def test_convert_tool_registry_to_response_format(clean_tool_registry):
     """Test that the tool registry is converted to the correct format"""
     response_tools = ToolRegistry.convert_tool_registry_to_response_format()
     assert response_tools == [
@@ -91,7 +94,7 @@ def test_convert_tool_registry_to_response_format():
     ]
 
 
-def test_convert_tool_registry_to_chat_completions_format():
+def test_convert_tool_registry_to_chat_completions_format(clean_tool_registry):
     """Test that the tool registry is converted to the correct format"""
     chat_completions_tools = ToolRegistry.convert_tool_registry_to_chat_completions_format()
     assert chat_completions_tools == [
@@ -109,7 +112,7 @@ def test_convert_tool_registry_to_chat_completions_format():
         }
     ]
 
-def test_execute_tool_call_valid_tool():
+def test_execute_tool_call_valid_tool(clean_tool_registry):
     """Test that the tool registry is executed correctly"""
     result = ToolRegistry.execute_tool_call("echo", {"text": "Hello, world!"})
     assert result == "Echoed: Hello, world!"

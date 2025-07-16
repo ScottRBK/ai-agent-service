@@ -70,15 +70,16 @@ class AzureOpenAIProvider(BaseProvider):
         """Get a list of available models."""
         return self.config.model_list
 
-    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
+    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None) -> str:
         """Send input to the provider and return the response."""
 
         logger.debug(f"AzureOpenAIProvider - send_chat - model: {model}")
         logger.debug(f"AzureOpenAIProvider - send_chat - instructions: {instructions}")
         logger.debug(f"AzureOpenAIProvider - send_chat - context: {context}")
         logger.debug(f"AzureOpenAIProvider - send_chat - tools: {tools}")
+        logger.debug(f"AzureOpenAIProvider - send_chat - agent_id: {agent_id}")
         logger.debug(f"AzureOpenAIProvider - send_chat - self.client: {self.client.base_url}")
-        
+
         registered_tools = None
         if tools:
             tools_list = ToolRegistry.convert_tool_registry_to_response_format()
@@ -98,12 +99,12 @@ class AzureOpenAIProvider(BaseProvider):
             total_tool_iterations += 1
             for output in response.output:
                 if output.type == "function_call":
-                    logger.debug(f"AzureOpenAIProvider - send_chat - function_call: {output.model_dump_json(indent=2)}")
+                    logger.debug(f"AzureOpenAIProvider - send_chat - function_call: {output.model_dump_json()}")
                     tool_name = output.name
                     arguments = output.arguments
                     call_id = output.call_id
                     logger.debug(f"AzureOpenAIProvider - send_chat - executing tool call - tool_name: {tool_name}, arguments: {arguments}, call_id: {call_id}")
-                    result = ToolRegistry.execute_tool_call(tool_name, json.loads(arguments))
+                    result = self.execute_tool_call(tool_name, json.loads(arguments))
                     tool_messages.append(output)
                     tool_messages.append({"type": "function_call_output", "call_id": call_id,"output": str(result)})
 

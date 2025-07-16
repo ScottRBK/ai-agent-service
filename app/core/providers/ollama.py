@@ -4,6 +4,7 @@ from app.core.providers.base import BaseProvider, ProviderMaxToolIterationsError
 from app.models.health import HealthStatus
 from app.models.providers import OllamaConfig
 from app.models.tools.tools import Tool
+from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
 from pydantic import ValidationError
 from app.utils.logging import logger
@@ -60,8 +61,9 @@ class OllamaProvider(BaseProvider):
         return self.config.model_list
 
     async def send_chat(self, context: list, model: str, 
-                        instructions: str, tools: list[Tool] = None, 
-                        available_functions: dict[str, str] = None) -> str:
+                        instructions: str, 
+                        tools: list[Tool] = None, 
+                        agent_id: str = None) -> str:
         """Send input to the provider and return the response."""
         messages = []
 
@@ -69,24 +71,22 @@ class OllamaProvider(BaseProvider):
         logger.debug(f"OllamaProvider - send_chat - instructions: {instructions}")
         logger.debug(f"OllamaProvider - send_chat - context: {context}")
         logger.debug(f"OllamaProvider - send_chat - tools: {tools}")
+        logger.debug(f"OllamaProvider - send_chat - agent_id: {agent_id}")
         logger.debug(f"OllamaProvider - send_chat - self.client: {self.config.base_url}")
 
         if instructions:
             messages.append({"role": "system", "content": instructions})
 
-        registered_tools = None
-
-        if tools:
-            tools_list = ToolRegistry.convert_tool_registry_to_chat_completions_format()
-            registered_tools = [tool for tool in tools_list if tool["function"]["name"] in tools]
-            logger.debug(f"OllamaProvider - send_chat - registered tools: {registered_tools}")
+        # Get available tools using AgentToolManager if agent_id is provided
+        available_tools = await self.get_available_tools(agent_id, tools)
+        logger.debug(f"OllamaProvider - send_chat - available tools: {len(available_tools) if available_tools else 0}")
 
         messages.extend(context)
 
         response: ChatResponse = await self.client.chat(
             model=model,
             messages=messages,
-            tools=registered_tools
+            tools=available_tools
         )
         await self.record_successful_call()
         logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
@@ -101,7 +101,7 @@ class OllamaProvider(BaseProvider):
                 logger.debug(f"OllamaProvider - send_chat - tool_calls: {response.message.tool_calls}")
 
                 for tool_call in response.message.tool_calls:
-                    tool_result = ToolRegistry.execute_tool_call(tool_call.function.name, tool_call.function.arguments)
+                    tool_result = await self.execute_tool_call(tool_call.function.name, tool_call.function.arguments, agent_id)
                     messages.append({
                         "role": "tool",
                         "content": str(tool_result)
@@ -110,7 +110,7 @@ class OllamaProvider(BaseProvider):
                 response: ChatResponse = await self.client.chat(
                     model=model,
                     messages=messages,
-                    tools=registered_tools
+                    tools=available_tools
                 )
                 await self.record_successful_call()
                 logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
@@ -120,6 +120,7 @@ class OllamaProvider(BaseProvider):
                 total_tool_iterations += 1
             else:
                 break
+
         if total_tool_iterations >= self.max_tool_iterations:
             logger.error(f"""OllamaProvider - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
             raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)

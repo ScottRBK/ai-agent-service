@@ -9,6 +9,9 @@ from datetime import datetime
 from app.models.providers import ProviderConfig
 from app.models.tools.tools import Tool
 from app.models.health import HealthStatus
+from app.core.agents.agent_tool_manager import AgentToolManager
+from app.core.tools.tool_registry import ToolRegistry
+import json
 
 class ProviderError(Exception):
     """Base exception for provider errors."""
@@ -90,3 +93,28 @@ class BaseProvider(ABC):
         self.total_requests += 1
         self.success_requests += 1
         self.last_successful_call = datetime.now()
+
+    async def get_available_tools(self, agent_id: str = None, requested_tools: list[Tool] = None) -> list[dict]:
+        """
+        Get available tools for the agent, combining regular tools and MCP tools.
+        """
+        if agent_id:
+            agent_manager = AgentToolManager(agent_id)
+            tools = await agent_manager.get_available_tools()
+            return tools if tools else None
+        elif requested_tools:
+            tools_list = ToolRegistry.convert_tool_registry_to_chat_completions_format()
+            tools = [tool for tool in tools_list if tool["function"]["name"] in requested_tools]
+            return tools if tools else None
+        return None
+
+    async def execute_tool_call(self, tool_name: str, arguments: dict, agent_id: str = None) -> str:
+        """
+        Execute a tool call with extracted name and arguments.
+        Each provider extracts these from their own API structure.
+        """
+        if agent_id:
+            agent_manager = AgentToolManager(agent_id)
+            return await agent_manager.execute_tool(tool_name, arguments)
+        else:
+            return ToolRegistry.execute_tool_call(tool_name, arguments)
