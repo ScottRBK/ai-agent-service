@@ -265,6 +265,7 @@ docker-compose --profile dev up
 
 Key dependencies include:
 - **FastAPI** - Modern web framework
+- **FastMCP** - Modern MCP Integration framework
 - **Uvicorn** - ASGI server with uvloop for performance
 - **Pydantic** - Data validation and settings management
 - **Pydantic-settings** - Environment-based configuration
