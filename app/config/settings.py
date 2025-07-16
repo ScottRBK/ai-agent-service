@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # Application Info
     SERVICE_NAME: str = "AI Agent Service"
-    SERVICE_VERSION: str = "0.1.9"
+    SERVICE_VERSION: str = "0.1.10"
     SERVICE_DESCRIPTION: str = "AI Agent Service that provides intelligent automation and AI-powered capabilities"
 
     # Server Configuration

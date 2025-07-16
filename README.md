@@ -7,7 +7,10 @@ A modern, intelligent AI Agent Service built with FastAPI that provides automate
 - **FastAPI Framework** - Modern, fast web framework with automatic API documentation
 - **AI Agent Capabilities** - Intelligent automation and decision-making
 - **Health Check Endpoints** - Built-in monitoring and status endpoints
-- **Docker Support** - Multi-stage builds with development and production targets
+- **Multi-Provider AI Support** - Azure OpenAI, Ollama with unified interface
+- **MCP Integration** - Model Context Protocol for external tools
+- **Tool Filtering** - Agent-specific permissions and authorization
+- **Docker Support** - Multi-stage builds with development and production targets 
 - **Environment Configuration** - Flexible settings with environment variable support
 - **Structured Logging** - Comprehensive logging setup for debugging and monitoring
 - **Type Safety** - Full type hints throughout the codebase
@@ -59,27 +62,30 @@ ai-agent-service/
 │   ├── api/
 │   │   └── routes/
 │   │       ├── __init__.py
-│   │       └── health.py         # Health check endpoints
+│   │       └── health.py
+│   ├── core/
+│   │   ├── agents/
+│   │   │   └── agent_tool_manager.py    # Agent tool filtering
+│   │   ├── providers/
+│   │   │   ├── base.py                  # Base provider interface
+│   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API)
+│   │   │   ├── azureopenapi_cc.py       # Azure OpenAI (Chat Completions)
+│   │   │   └── ollama.py                # Ollama provider
+│   │   └── tools/
+│   │       ├── tool_registry.py         # Tool management
+│   │       └── function_calls/          # Built-in tools
 │   ├── config/
-│   │   ├── __init__.py
-│   │   └── settings.py           # Application configuration
 │   ├── models/
-│   │   ├── __init__.py
-│   │   └── health.py             # Pydantic models
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   └── logging.py            # Logging configuration
-│   ├── __init__.py
-│   └── main.py                   # FastAPI application entry point
-├── docker/
-│   ├── Dockerfile                # Multi-stage Docker build
-│   ├── docker-compose.yml        # Development orchestration
-│   └── .dockerignore
+│   └── utils/
 ├── tests/
-│   └── test_health.py            # Test suite
-├── requirements.txt              # Python dependencies
-├── .gitignore
-└── README.md
+│   ├── test_core/
+│   │   ├── test_agents/                 # Agent unit tests
+│   │   ├── test_providers/              # Provider tests
+│   │   └── test_tools/                  # Tool tests
+│   └── test_integration/                # End-to-end tests
+├── agent_config.json                    # Agent configurations
+├── mcp.json                            # MCP server config
+└── requirements.txt
 ```
 
 ## 🔧 Configuration
@@ -148,6 +154,49 @@ docker run -p 8000:8000 ai-agent-service:latest
 docker run -e PORT=8001 -p 8001:8001 ai-agent-service:latest
 ```
 
+## 🤖 AI Agent & Tool Management
+
+### Agent Configuration
+Configure agent-specific tool access via `agent_config.json`:
+
+```json
+[
+  {
+    "agent_id": "research_agent",
+    "allowed_regular_tools": ["get_current_datetime"],
+    "allowed_mcp_servers": ["deepwiki", "fetch"],
+    "allowed_mcp_tools": {
+      "deepwiki": ["read_wiki_structure", "search_wiki"],
+      "fetch": ["fetch_url"]
+    }
+  }
+]
+```
+
+### MCP (Model Context Protocol) Integration
+I have included two example MCP servers for examples
+- **DeepWiki Server** - Interrogate information on Deepwiki page, https://docs.devin.ai/work-with-devin/deepwiki-mcp
+- **Fetch Server** - An MCP server that provides web content fetching capabilities. This server enables LLMs to retrieve and process content from web pages, converting HTML to markdown for easier consumption 
+- **Extensible** - Add custom MCP servers via `mcp.json`
+
+### Tool Filtering
+- **Agent-specific permissions** - Control which tools each agent can access
+- **Regular tools** - Built-in functions like date/time, arithmetic, these are both just very basic examples 
+- **MCP tools** - External server capabilities with proper authorization
+
+## Provider Support
+
+### Supported AI Providers
+- **Azure OpenAI (Chat Completions)** - Full MCP integration
+- **Azure OpenAI (Responses API)** - Full MCP integration  
+- **Ollama** - Full MCP integration
+
+### Provider Features
+- **Tool calling** - Execute functions and MCP tools
+- **Agent filtering** - Provider-agnostic tool management
+- **Health monitoring** - Provider status and metrics
+- **Error handling** - Robust error management
+
 ## 🧪 Testing
 
 ```bash
@@ -184,19 +233,26 @@ curl http://localhost:8001/health
 3. Include the router in `app/main.py`
 
 Example:
+### Using Agents with MCP Tools
+
 ```python
-# app/api/routes/example.py
-from fastapi import APIRouter
+from app.core.agents.agent_tool_manager import AgentToolManager
+from app.core.providers.manager import ProviderManager
 
-router = APIRouter()
+# Create agent with specific tool access
+agent_manager = AgentToolManager("research_agent")
 
-@router.get("/example")
-async def example_endpoint():
-    return {"message": "Hello World"}
+# Get available tools (regular + MCP)
+tools = await agent_manager.get_available_tools()
 
-# app/main.py
-from app.api.routes.example import router as example_router
-app.include_router(example_router)
+# Use with any provider
+provider = ProviderManager().get_provider("azure_openai_cc")
+response = await provider.send_chat(
+    context=[{"role": "user", "content": "What's the current time?"}],
+    model="gpt-4",
+    instructions="You are a helpful assistant.",
+    agent_id="research_agent"
+)
 ```
 
 ### Hot Reload
