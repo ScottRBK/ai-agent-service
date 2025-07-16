@@ -27,7 +27,7 @@ from app.utils.logging import logger
 
 def print_usage():
     """Print usage information."""
-    print("�� AI Agent Service - Agent Runner")
+    print("🤖 AI Agent Service - Agent Runner")
     print("=" * 50)
     print()
     print("Usage:")
@@ -85,7 +85,7 @@ async def main():
         print_usage()
         return
     
-    print(f"�� Starting {agent_id} agent with {provider_id} provider...")
+    print(f"🤖 Starting {agent_id} agent with {provider_id} provider...")
     print()
     
     # Validate agent and provider

@@ -66,7 +66,7 @@ class CLIAgent:
         await self.initialize()
         
         print(f"🤖 {self.agent_id} Agent Ready!")
-        print(f"�� Available tools: {len(await self.tool_manager.get_available_tools())}")
+        print(f"🛠️ Available tools: {len(await self.tool_manager.get_available_tools())}")
         print("💬 Type 'quit' to exit\n")
         
         while True:

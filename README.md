@@ -237,7 +237,7 @@ python examples/run_agent.py mcp_agent azure_openai_cc
 $ python examples/run_agent.py research_agent azure_openai_cc
 
 🤖 research_agent Agent Ready!
-��️ Available tools: 6
+🛠️ Available tools: 6
 💬 Type 'quit' to exit
 
 You: What's the current time in Tokyo?
