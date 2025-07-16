@@ -1,9 +1,10 @@
 # AI Agent Service
 
-A modern, intelligent AI Agent Service built with FastAPI that provides automated decision-making and AI-powered capabilities. Built with Docker, comprehensive logging, and production-ready features.
+A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP that demonstrates how to implement agent tool management, prompt handling, and multi-provider AI integration from scratch. This project showcases a production-ready implementation of agent-specific tool filtering, dynamic system prompts, and unified provider interfaces without relying on abstraction frameworks. Built with Docker, comprehensive logging, and enterprise-grade features.
 
 ## ✨ Features
 
+- **Framework Design** - Complete implementation showing how to build AI agents from the ground up
 - **FastAPI Framework** - Modern, fast web framework with automatic API documentation
 - **AI Agent Capabilities** - Intelligent automation and decision-making
 - **Health Check Endpoints** - Built-in monitoring and status endpoints
