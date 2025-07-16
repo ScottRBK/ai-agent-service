@@ -197,6 +197,93 @@ I have included two example MCP servers for examples
 - **Health monitoring** - Provider status and metrics
 - **Error handling** - Robust error management
 
+## 🤖 Running Agents
+
+### Quick Start with CLI Agent
+
+Use the example script to run different agents with various providers:
+
+```bash
+# Run the research agent with Azure OpenAI
+python examples/run_agent.py research_agent azure_openai_cc
+
+# Run the data analysis agent with Ollama
+python examples/run_agent.py data_agent ollama
+
+# Run the MCP-only agent
+python examples/run_agent.py mcp_agent azure_openai_cc
+```
+
+### Available Agents
+
+| Agent | Description | Tools Available |
+|-------|-------------|-----------------|
+| `research_agent` | Research assistant with web access | datetime, deepwiki, fetch |
+| `data_agent` | Data analysis specialist | datetime, arithmetic |
+| `mcp_agent` | MCP tools only | deepwiki, fetch |
+| `restricted_agent` | Limited access example | specific tools only |
+
+### Available Providers
+
+| Provider | Description | Use Case |
+|----------|-------------|----------|
+| `azure_openai_cc` | Azure OpenAI (Chat Completions) | Production, full features |
+| `azure_openai` | Azure OpenAI (Responses API) | Legacy compatibility |
+| `ollama` | Local Ollama provider | Development, offline |
+
+### Example Session
+
+```bash
+$ python examples/run_agent.py research_agent azure_openai_cc
+
+🤖 research_agent Agent Ready!
+��️ Available tools: 6
+💬 Type 'quit' to exit
+
+You: What's the current time in Tokyo?
+🤔 Thinking...
+🤖 research_agent: The current time in Tokyo is 2025-01-16 15:30:45.
+
+You: Research Python async programming
+🤔 Thinking...
+🤖 research_agent: I'll search for information about Python async programming...
+
+You: quit
+👋 Goodbye!
+```
+
+### Agent Configuration
+
+Agents are configured in `agent_config.json`:
+
+```json
+[
+  {
+    "agent_id": "research_agent",
+    "allowed_regular_tools": ["get_current_datetime"],
+    "allowed_mcp_servers": ["deepwiki", "fetch"],
+    "allowed_mcp_tools": {
+      "deepwiki": ["read_wiki_structure", "search_wiki"],
+      "fetch": ["fetch_url"]
+    }
+  }
+]
+```
+
+### Troubleshooting
+
+**Agent not found:**
+- Check `agent_config.json` exists and is valid JSON
+- Verify agent_id matches configuration
+
+**Provider not available:**
+- Check provider credentials and configuration
+- Ensure required environment variables are set
+
+**Tools not working:**
+- Verify MCP servers are running (for MCP tools)
+- Check tool permissions in agent configuration
+
 ## 🧪 Testing
 
 ### Test Coverage
