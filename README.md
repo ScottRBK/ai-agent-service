@@ -199,29 +199,32 @@ I have included two example MCP servers for examples
 
 ## 🧪 Testing
 
-```bash
-# Install test dependencies (included in requirements.txt)
-pip install pytest pytest-asyncio httpx
+### Test Coverage
+- **75+ tests** including unit and integration tests
+- **Agent tool filtering** - Comprehensive permission testing
+- **MCP integration** - End-to-end tool execution
+- **Provider compatibility** - All providers tested
 
-# Run tests
+### Running Tests
+```bash
+# Run all tests
 pytest tests/
 
+# Run specific test categories
+pytest tests/test_core/test_agents/     # Agent unit tests
+pytest tests/test_integration/          # Integration tests
+
 # Run with coverage
-pytest tests/ --cov=app
+pytest tests/ --cov=app --cov-report=html
 ```
 
-### Example Test
+### Test Examples
 ```bash
-# Test health endpoint
-curl http://localhost:8001/health
+# Test agent tool filtering
+pytest tests/test_integration/test_agent_tool_filtering_integration.py
 
-# Expected response
-{
-  "status": "healthy",
-  "timestamp": "2024-01-01T12:00:00.000000",
-  "service": "AI Agent Service", 
-  "version": "1.0.0"
-}
+# Test MCP integration
+pytest tests/test_integration/test_basic_chat_agent_integration.py
 ```
 
 ## 🛠️ Development
