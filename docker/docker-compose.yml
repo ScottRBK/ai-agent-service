@@ -11,3 +11,18 @@ services:
     container_name: ${DEV_CONTAINER_NAME:-ai-agent-service-dev}
     ports:
       - "${PORT:-8000}:${CONTAINER_PORT:-8000}"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-ai-agent-service-dev}-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_agent_db}
+      POSTGRES_USER: ${POSTGRES_USER:-ai_agent_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ai_agent_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

@@ -18,6 +18,9 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 - **Type Safety** - Full type hints throughout the codebase
 - **Auto-Generated Docs** - Interactive API documentation with Swagger UI and ReDoc
 - **Hot Reload** - Development mode with automatic code reloading
+- **Resource Management** - Global resource lifecycle management with agent-specific filtering
+- **Memory Persistence** - PostgreSQL-based conversation history with automatic cleanup
+- **Agent Resource Manager** - Per-agent resource access control and automatic resource creation
 
 ## 🚀 Quick Start
 
@@ -67,23 +70,31 @@ ai-agent-service/
 │   │       └── health.py
 │   ├── core/
 │   │   ├── agents/
-│   │   │   └── agent_tool_manager.py    # Agent tool filtering
+│   │   │   ├── agent_tool_manager.py    # Agent tool filtering
+│   │   │   ├── agent_resource_manager.py # Agent resource management
 │   │   │   └── prompt_manager.py        # System prompt management
 │   │   ├── providers/
 │   │   │   ├── base.py                  # Base provider interface
 │   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API)
 │   │   │   ├── azureopenapi_cc.py       # Azure OpenAI (Chat Completions)
 │   │   │   └── ollama.py                # Ollama provider
+│   │   ├── resources/
+│   │   │   ├── base.py                  # Base resource interface
+│   │   │   ├── manager.py               # Global resource management
+│   │   │   └── memory.py                # PostgreSQL memory resource
 │   │   └── tools/
 │   │       ├── tool_registry.py         # Tool management
 │   │       └── function_calls/          # Built-in tools
 │   ├── config/
 │   ├── models/
+│   │   └── resources/
+│   │       └── memory.py                # Memory data models
 │   └── utils/
 ├── tests/
 │   ├── test_core/
 │   │   ├── test_agents/                 # Agent unit tests
 │   │   ├── test_providers/              # Provider tests
+│   │   ├── test_resources/              # Resource tests
 │   │   └── test_tools/                  # Tool tests
 │   └── test_integration/                # End-to-end tests
 ├── agent_config.json                    # Agent configurations
@@ -156,12 +167,31 @@ docker run -p 8000:8000 ai-agent-service:latest
 ```bash
 # Override default port
 docker run -e PORT=8001 -p 8001:8001 ai-agent-service:latest
+
+# PostgreSQL Configuration
+POSTGRES_DB=ai_agent_db
+POSTGRES_USER=ai_agent_user
+POSTGRES_PASSWORD=ai_agent_password
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+```
+
+### Database Setup
+The service includes PostgreSQL for memory persistence:
+
+```bash
+# Start with database
+cd docker
+docker-compose --profile dev up --build
+
+# Database will be automatically initialized
+# Access via DBeaver or other PostgreSQL client
 ```
 
 ## 🤖 AI Agent & Tool Management
 
 ### Agent Configuration
-Configure agent-specific tool access via `agent_config.json`:
+Configure agent-specific tool access and resources via `agent_config.json`:
 
 ```json
 [
@@ -173,10 +203,17 @@ Configure agent-specific tool access via `agent_config.json`:
     "allowed_mcp_tools": {
       "deepwiki": ["read_wiki_structure", "search_wiki"],
       "fetch": ["fetch_url"]
-    }
+    },
+    "resources": ["memory"],
+    "provider": "azure_openai_cc"
   }
 ]
 ```
+
+**Resource Configuration:**
+- `resources` - Array of resource types available to the agent
+- Automatic resource creation when agents request access
+- Memory resources provide conversation persistence across sessions
 
 ### MCP (Model Context Protocol) Integration
 I have included two example MCP servers for examples
@@ -216,18 +253,24 @@ The service includes a flexible prompt management system:
 
 ### Quick Start with CLI Agent
 
-Use the example script to run different agents with various providers:
+Use the example script to run different agents with various providers and memory:
 
 ```bash
-# Run the research agent with Azure OpenAI
+# Run the research agent with Azure OpenAI and memory
 python examples/run_agent.py research_agent azure_openai_cc
 
-# Run the data analysis agent with Ollama
-python examples/run_agent.py data_agent ollama
+# Run the CLI agent with conversation memory
+python examples/run_agent.py cli_agent azure_openai_cc
 
 # Run the MCP-only agent
 python examples/run_agent.py mcp_agent azure_openai_cc
 ```
+
+### Memory Features
+- **Conversation Persistence** - Agents remember previous interactions
+- **Session Isolation** - Separate memory per user and session
+- **Automatic Cleanup** - Expired memories automatically removed
+- **Content Filtering** - Internal tags and formatting automatically cleaned
 
 ### Available Agents
 
@@ -308,6 +351,8 @@ Agents are configured in `agent_config.json`:
 ### Test Coverage
 - **103+ tests** including unit and integration tests
 - **Agent tool filtering** - Comprehensive permission testing
+- **Resource management** - Memory resource CRUD operations and lifecycle
+- **Agent resource filtering** - Per-agent resource access control
 - **Prompt management** - System prompt loading and integration
 - **MCP integration** - End-to-end tool execution
 - **Provider compatibility** - All providers tested
@@ -319,6 +364,7 @@ pytest tests/
 
 # Run specific test categories
 pytest tests/test_core/test_agents/     # Agent unit tests
+pytest tests/test_core/test_resources/  # Resource tests
 pytest tests/test_integration/          # Integration tests
 
 # Run with coverage
@@ -327,6 +373,9 @@ pytest tests/ --cov=app --cov-report=html
 
 ### Test Examples
 ```bash
+# Test resource management
+pytest tests/test_core/test_resources/test_memory_resource.py
+
 # Test agent tool filtering
 pytest tests/test_integration/test_agent_tool_filtering_integration.py
 
