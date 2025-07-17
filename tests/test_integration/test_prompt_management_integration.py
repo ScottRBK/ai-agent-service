@@ -116,11 +116,18 @@ async def test_prompt_manager_fallback_integration(provider_id, caplog):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
-async def test_cli_agent_prompt_integration(provider_id, caplog):
+async def test_cli_agent_prompt_integration(provider_id, caplog, monkeypatch):
     """Test CLI agent with PromptManager integration."""
     caplog.set_level(logging.INFO)
     
     from app.core.agents.cli_agent import CLIAgent
+    
+    # Mock the get_model_config method to return None for model_settings
+    def mock_get_model_config(self):
+        return None, None
+    
+    # Apply the mock
+    monkeypatch.setattr("app.core.agents.agent_resource_manager.AgentResourceManager.get_model_config", mock_get_model_config)
     
     try:
         # Test CLI agent initialization

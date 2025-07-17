@@ -9,11 +9,13 @@ from app.models.health import HealthStatus
 from app.models.providers import AzureOpenAIConfig
 from app.models.tools.tools import Tool
 from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
+from app.core.agents.agent_tool_manager import AgentToolManager
 from app.utils.logging import logger
 from openai import AsyncAzureOpenAI
 from datetime import datetime
 from pydantic import ValidationError
 import json
+from typing import Optional
 
 class AzureOpenAIProvider(BaseProvider):
     def __init__(self, config: AzureOpenAIConfig):
@@ -70,7 +72,7 @@ class AzureOpenAIProvider(BaseProvider):
         """Get a list of available models."""
         return self.config.model_list
 
-    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None) -> str:
+    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
 
         logger.debug(f"AzureOpenAIProvider - send_chat - model: {model}")
@@ -82,17 +84,23 @@ class AzureOpenAIProvider(BaseProvider):
         available_tools = await self.get_available_tools(agent_id, tools)
         logger.debug(f"AzureOpenAIProvider - send_chat - available tools: {available_tools}")
 
-        response = await self.client.responses.create(
-            model=model,
-            instructions=instructions,
-            input=context,
-            tools=available_tools
+        request_params = {
+            "model": model,
+            "instructions": instructions,
+            "input": context,
+            "tools": available_tools
+        }
 
-        )
-        tool_messages = []
+        if model_settings:
+            request_params.update(model_settings)
+
+        response = await self.client.responses.create(**request_params)
+        
         total_tool_iterations = 0
         for _ in range(self.max_tool_iterations):
             total_tool_iterations += 1
+            tool_messages = []  # Reset tool_messages for each iteration
+            
             for output in response.output:
                 if output.type == "function_call":
                     logger.debug(f"AzureOpenAIProvider - send_chat - function_call: {output.model_dump_json()}")
@@ -100,7 +108,7 @@ class AzureOpenAIProvider(BaseProvider):
                     arguments = output.arguments
                     call_id = output.call_id
                     logger.debug(f"AzureOpenAIProvider - send_chat - executing tool call - tool_name: {tool_name}, arguments: {arguments}, call_id: {call_id}")
-                    result = self.execute_tool_call(tool_name, json.loads(arguments))
+                    result = await self.execute_tool_call(tool_name, json.loads(arguments), agent_id)
                     tool_messages.append(output)
                     tool_messages.append({"type": "function_call_output", "call_id": call_id,"output": str(result)})
 
@@ -118,6 +126,7 @@ class AzureOpenAIProvider(BaseProvider):
                         /n response: {response.output_text}""")
             else:
                 break
+                
         if total_tool_iterations >= self.max_tool_iterations:
             logger.error(f"""AzureOpenAIProvider - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
             raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
@@ -129,19 +138,75 @@ class AzureOpenAIProvider(BaseProvider):
         """Stream input to the provider and yield the response."""
         pass
 
+    async def get_available_tools(self, agent_id: str = None, requested_tools: list[Tool] = None) -> list[dict]:
+        """
+        Get available tools for the agent, combining regular tools and MCP tools.
+        Caches tools per agent_id to avoid repeated MCP server calls.
+        """
+        if agent_id:
+            # Check cache first
+            if agent_id in self.cached_tools:
+                return self.cached_tools[agent_id]
+            
+            # Load and cache tools
+            agent_manager = AgentToolManager(agent_id)
+            tools = await agent_manager.get_available_tools()
+            
+            # Convert from chat completions format to response format
+            response_tools = self.convert_to_response_format(tools)
+            self.cached_tools[agent_id] = response_tools if response_tools else None
+            return self.cached_tools[agent_id]
+        elif requested_tools:
+            tools_list = ToolRegistry.convert_tool_registry_to_response_format()
+            tools = [tool for tool in tools_list if tool["name"] in requested_tools]
+            return tools if tools else None
+        return None
 
-    
-    # async def execute_tool_call(self, tool_name: str, arguments: dict) -> str:
-    #     if tool_name not in TOOL_REGISTRY:
-    #         raise ValueError(f"Tool '{tool_name}' not registered.")
+    def convert_to_response_format(self, chat_completions_tools: list[dict]) -> list[dict]:
+        """
+        Convert tools from chat completions format to response format.
+        
+        Chat completions format:
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_name",
+                "description": "description",
+                "parameters": {...}
+            }
+        }
+        
+        Response format:
+        {
+            "type": "function", 
+            "name": "tool_name",
+            "description": "description",
+            "parameters": {...}
+        }
+        """
+        if not chat_completions_tools:
+            return []
+        
+        response_tools = []
+        for tool in chat_completions_tools:
+            if tool.get("type") == "function" and "function" in tool:
+                response_tool = {
+                    "type": "function",
+                    "name": tool["function"]["name"],
+                    "description": tool["function"]["description"],
+                    "parameters": tool["function"]["parameters"]
+                }
+                response_tools.append(response_tool)
+        
+        return response_tools
 
-    #     tool_entry = TOOL_REGISTRY[tool_name]
-    #     params_model = tool_entry["params_model"]
-    #     implementation = tool_entry["implementation"]
-
-    #     try:
-    #         validated_args = params_model(**arguments)
-    #     except ValidationError as e:
-    #         raise ValueError(f"Argument validation error: {e}")
-
-    #     return implementation(**validated_args.model_dump())
+    async def execute_tool_call(self, tool_name: str, arguments: dict, agent_id: str = None) -> str:
+        """
+        Execute a tool call using the AgentToolManager if agent_id is available,
+        otherwise fall back to the ToolRegistry.
+        """
+        if agent_id:
+            agent_manager = AgentToolManager(agent_id)
+            return await agent_manager.execute_tool(tool_name, arguments)
+        else:
+            return ToolRegistry.execute_tool_call(tool_name, arguments)
