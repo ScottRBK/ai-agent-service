@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app.utils.logging import logger
 from openai import AsyncAzureOpenAI
 from datetime import datetime
-
+from typing import Optional
 
 class AzureOpenAIProviderCC(BaseProvider):
     def __init__(self, config: AzureOpenAIConfig):
@@ -71,7 +71,7 @@ class AzureOpenAIProviderCC(BaseProvider):
         """Get a list of available models."""
         return self.config.model_list
 
-    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None) -> str:
+    async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
         messages = []
 
@@ -91,11 +91,16 @@ class AzureOpenAIProviderCC(BaseProvider):
 
         messages.extend(context)
 
-        response = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=available_tools
-            )
+        request_params = {
+            "model": model,
+            "messages": messages,
+            "tools": available_tools
+        }
+
+        if model_settings:
+            request_params.update(model_settings)
+
+        response = await self.client.chat.completions.create(**request_params)
         await self.record_successful_call()
 
         logger.debug(f"""AzureOpenAIProviderCC - send_chat - Success: {self.success_requests}, 
@@ -121,10 +126,8 @@ class AzureOpenAIProviderCC(BaseProvider):
                     })
                     logger.debug(f"AzureOpenAIProviderCC - send_chat - tool result: {tool_result}")
                     
-                response = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=available_tools)
+                request_params["messages"] = messages
+                response = await self.client.chat.completions.create(**request_params)
 
                 await self.record_successful_call()
                 

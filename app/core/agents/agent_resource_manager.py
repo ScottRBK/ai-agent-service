@@ -152,3 +152,10 @@ class AgentResourceManager:
         if allowed_resources is None:
             return False
         return resource_name in allowed_resources
+    
+    def get_model_config(self) -> tuple[str, Optional[dict]]:
+        """Get the model and settings for this agent."""
+        model = self.config.get("model")
+        model_settings = self.config.get("model_settings")
+        
+        return model, model_settings

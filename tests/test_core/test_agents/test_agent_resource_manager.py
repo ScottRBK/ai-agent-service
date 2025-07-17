@@ -411,3 +411,70 @@ class TestAgentResourceManager:
         assert memory_resource is not None
         assert memory_resource.resource_type == ResourceType.MEMORY
         assert memory_resource.resource_id == "global_memory" 
+
+    def test_get_model_config_with_model_and_settings(self):
+        """Test get_model_config when agent has model and model_settings configured."""
+        agent_manager = AgentResourceManager("cli_agent")
+        agent_manager.config = {
+            "agent_id": "cli_agent",
+            "model": "qwen3:4b",
+            "model_settings": {
+                "num_ctx": 30000,
+                "num_predict": 30000,
+                "temperature": 0.7
+            }
+        }
+        
+        model, settings = agent_manager.get_model_config()
+        
+        assert model == "qwen3:4b"
+        assert settings == {
+            "num_ctx": 30000,
+            "num_predict": 30000,
+            "temperature": 0.7
+        }
+
+    def test_get_model_config_with_model_only(self):
+        """Test get_model_config when agent has only model configured."""
+        agent_manager = AgentResourceManager("cli_agent")
+        agent_manager.config = {
+            "agent_id": "cli_agent",
+            "model": "qwen3:4b"
+        }
+        
+        model, settings = agent_manager.get_model_config()
+        
+        assert model == "qwen3:4b"
+        assert settings is None
+
+    def test_get_model_config_with_settings_only(self):
+        """Test get_model_config when agent has only model_settings configured."""
+        agent_manager = AgentResourceManager("cli_agent")
+        agent_manager.config = {
+            "agent_id": "cli_agent",
+            "model_settings": {
+                "temperature": 0.7,
+                "max_tokens": 2000
+            }
+        }
+        
+        model, settings = agent_manager.get_model_config()
+        
+        assert model is None
+        assert settings == {
+            "temperature": 0.7,
+            "max_tokens": 2000
+        }
+
+    def test_get_model_config_without_model_config(self):
+        """Test get_model_config when agent has no model configuration."""
+        agent_manager = AgentResourceManager("cli_agent")
+        agent_manager.config = {
+            "agent_id": "cli_agent",
+            "resources": ["memory"]
+        }
+        
+        model, settings = agent_manager.get_model_config()
+        
+        assert model is None
+        assert settings is None 

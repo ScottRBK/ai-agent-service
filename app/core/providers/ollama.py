@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from app.utils.logging import logger
 from ollama import AsyncClient, ChatResponse, Message
 from datetime import datetime
-from typing import Sequence
+from typing import Optional
 
 class OllamaProvider(BaseProvider):
     def __init__(self, config: OllamaConfig):
@@ -63,7 +63,8 @@ class OllamaProvider(BaseProvider):
     async def send_chat(self, context: list, model: str, 
                         instructions: str, 
                         tools: list[Tool] = None, 
-                        agent_id: str = None) -> str:
+                        agent_id: str = None,
+                        model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
         messages = []
 
@@ -82,12 +83,16 @@ class OllamaProvider(BaseProvider):
         logger.debug(f"OllamaProvider - send_chat - available tools: {len(available_tools) if available_tools else 0}")
 
         messages.extend(context)
+        
+        request_params = {
+            "model": model,
+            "messages": messages,
+            "tools": available_tools
+        }
+        if model_settings:
+            request_params["options"] = model_settings
 
-        response: ChatResponse = await self.client.chat(
-            model=model,
-            messages=messages,
-            tools=available_tools
-        )
+        response: ChatResponse = await self.client.chat(**request_params)
         await self.record_successful_call()
         logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
                         Total: {self.total_requests}
@@ -107,11 +112,9 @@ class OllamaProvider(BaseProvider):
                         "content": str(tool_result)
                     })
 
-                response: ChatResponse = await self.client.chat(
-                    model=model,
-                    messages=messages,
-                    tools=available_tools
-                )
+                    request_params["messages"] = messages
+                response: ChatResponse = await self.client.chat(**request_params)
+
                 await self.record_successful_call()
                 logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
                         Total: {self.total_requests}

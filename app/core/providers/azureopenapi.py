@@ -76,21 +76,17 @@ class AzureOpenAIProvider(BaseProvider):
         logger.debug(f"AzureOpenAIProvider - send_chat - model: {model}")
         logger.debug(f"AzureOpenAIProvider - send_chat - instructions: {instructions}")
         logger.debug(f"AzureOpenAIProvider - send_chat - context: {context}")
-        logger.debug(f"AzureOpenAIProvider - send_chat - tools: {tools}")
         logger.debug(f"AzureOpenAIProvider - send_chat - agent_id: {agent_id}")
         logger.debug(f"AzureOpenAIProvider - send_chat - self.client: {self.client.base_url}")
 
-        registered_tools = None
-        if tools:
-            tools_list = ToolRegistry.convert_tool_registry_to_response_format()
-            registered_tools = [tool for tool in tools_list if tool["name"] in tools_list]
-            logger.debug(f"AzureOpenAIProvider - send_chat - registered tools: {registered_tools}")
+        available_tools = await self.get_available_tools(agent_id, tools)
+        logger.debug(f"AzureOpenAIProvider - send_chat - available tools: {available_tools}")
 
         response = await self.client.responses.create(
             model=model,
             instructions=instructions,
             input=context,
-            tools=registered_tools
+            tools=available_tools
 
         )
         tool_messages = []
@@ -113,7 +109,7 @@ class AzureOpenAIProvider(BaseProvider):
                     model=model,
                     instructions=instructions,
                     input=tool_messages,
-                    tools=registered_tools
+                    tools=available_tools
                 )
                 await self.record_successful_call()
                 logger.debug(f"""AzureOpenAIProvider - send_chat - Success: {self.success_requests}, 
@@ -135,17 +131,17 @@ class AzureOpenAIProvider(BaseProvider):
 
 
     
-    async def execute_tool_call(self, tool_name: str, arguments: dict) -> str:
-        if tool_name not in TOOL_REGISTRY:
-            raise ValueError(f"Tool '{tool_name}' not registered.")
+    # async def execute_tool_call(self, tool_name: str, arguments: dict) -> str:
+    #     if tool_name not in TOOL_REGISTRY:
+    #         raise ValueError(f"Tool '{tool_name}' not registered.")
 
-        tool_entry = TOOL_REGISTRY[tool_name]
-        params_model = tool_entry["params_model"]
-        implementation = tool_entry["implementation"]
+    #     tool_entry = TOOL_REGISTRY[tool_name]
+    #     params_model = tool_entry["params_model"]
+    #     implementation = tool_entry["implementation"]
 
-        try:
-            validated_args = params_model(**arguments)
-        except ValidationError as e:
-            raise ValueError(f"Argument validation error: {e}")
+    #     try:
+    #         validated_args = params_model(**arguments)
+    #     except ValidationError as e:
+    #         raise ValueError(f"Argument validation error: {e}")
 
-        return implementation(**validated_args.model_dump())
+    #     return implementation(**validated_args.model_dump())

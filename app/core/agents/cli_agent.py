@@ -18,7 +18,12 @@ class CLIAgent:
     Interactive command-line agent with tool capabilities.
     """
     
-    def __init__(self, agent_id: str = "cli_agent", provider_id: str = "azure_openai_cc", user_id: str = "default_user", session_id: str = "default_session"):
+    def __init__(self, agent_id: str = "cli_agent", 
+             provider_id: str = "azure_openai_cc", 
+             user_id: str = "default_user", 
+             session_id: str = "default_session",
+             model: Optional[str] = None,
+             model_settings: Optional[dict] = None):
         self.agent_id = agent_id
         self.provider_id = provider_id
         self.user_id = user_id
@@ -30,6 +35,10 @@ class CLIAgent:
         self.provider = None
         self.conversation_history = []
         self.initialized = False
+        
+        # Store model configuration
+        self.requested_model = model
+        self.requested_model_settings = model_settings
     
     async def initialize(self):
         """Initialize the agent and provider."""
@@ -49,7 +58,17 @@ class CLIAgent:
         self.system_prompt = self.prompt_manager.get_system_prompt_with_tools(self.available_tools)
         logger.debug(f"System prompt: {self.system_prompt}")
 
+        # Get model and settings with priority: CLI args > agent config > provider default
+        agent_model, agent_model_settings = self.resource_manager.get_model_config()
+        
+        # Use requested model/settings if provided, otherwise fall back to agent config
+        self.model = self.requested_model or agent_model or self.provider.config.default_model
+        self.model_settings = self.requested_model_settings or agent_model_settings
+        
+        logger.debug(f"Model: {self.model}, Model settings: {self.model_settings}")
+
         self.memory_resource = await self.resource_manager.get_memory_resource()
+
         if self.memory_resource:
             memories = await self.memory_resource.get_memories(self.user_id, session_id=self.session_id, agent_id=self.agent_id)
             self.conversation_history = [{"role": memory.content["role"], "content": memory.content["content"]} for memory in memories]
@@ -99,9 +118,10 @@ class CLIAgent:
         # Get response from provider
         response = await self.provider.send_chat(
             context=self.conversation_history,
-            model=self.provider.config.default_model,
+            model=self.model,
             instructions=self.system_prompt,
-            agent_id=self.agent_id
+            agent_id=self.agent_id,
+            model_settings=self.model_settings
         )
         
         # Add assistant response to history

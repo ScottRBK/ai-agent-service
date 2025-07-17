@@ -15,6 +15,7 @@ import asyncio
 import sys
 import os
 from pathlib import Path
+import argparse
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
@@ -74,49 +75,85 @@ def validate_provider(provider_id: str) -> bool:
         return False
 
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Run AI agents with custom settings")
+    parser.add_argument("agent_id", help="Agent ID to run")
+    parser.add_argument("provider_id", help="Provider ID to use")
+    parser.add_argument("--model", help="Model to use")
+    
+    # Generic settings - any key-value pair
+    parser.add_argument("--setting", action="append", nargs=2, 
+                       metavar=("KEY", "VALUE"), 
+                       help="Model setting KEY VALUE (can be used multiple times)")
+    
+    return parser.parse_args()
+
+def parse_setting_value(value):
+    """Parse a setting value, trying to convert to appropriate type."""
+    # Boolean
+    if value.lower() in ('true', 'false'):
+        return value.lower() == 'true'
+    
+    # Integer
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    
+    # Float
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    
+    # String (default)
+    return value
+
 async def main():
-    """Main function to run the agent."""
-    # Parse command line arguments
-    agent_id = sys.argv[1] if len(sys.argv) > 1 else "research_agent"
-    provider_id = sys.argv[2] if len(sys.argv) > 2 else "azure_openai_cc"
+    args = parse_arguments()
     
-    # Show usage if help is requested
-    if agent_id in ["-h", "--help", "help"]:
-        print_usage()
-        return
+    # Build model settings dictionary
+    model_settings = {}
     
-    print(f"🤖 Starting {agent_id} agent with {provider_id} provider...")
+    # Parse all --setting arguments
+    if args.setting:
+        for key, value in args.setting:
+            model_settings[key] = parse_setting_value(value)
+    
+    print(f"🤖 Starting {args.agent_id} agent with {args.provider_id} provider...")
+    if model_settings:
+        print(f"⚙️  Model settings: {model_settings}")
     print()
     
     # Validate agent and provider
-    if not validate_agent_config(agent_id):
-        print(f"❌ Agent '{agent_id}' not found or invalid configuration")
+    if not validate_agent_config(args.agent_id):
+        print(f"❌ Agent '{args.agent_id}' not found or invalid configuration")
         print("   Check agent_config.json for available agents")
         print()
         print_usage()
         return
     
-    if not validate_provider(provider_id):
-        print(f"❌ Provider '{provider_id}' not available")
+    if not validate_provider(args.provider_id):
+        print(f"❌ Provider '{args.provider_id}' not available")
         print("   Check your provider configuration")
         print()
         print_usage()
         return
     
-    print(f"✅ Agent '{agent_id}' validated")
-    print(f"✅ Provider '{provider_id}' validated")
+    print(f"✅ Agent '{args.agent_id}' validated")
+    print(f"✅ Provider '{args.provider_id}' validated")
     print()
     
     try:
-        # Create and run the agent
-        agent = CLIAgent(agent_id, provider_id)
+        # Create agent with settings
+        agent = CLIAgent(args.agent_id, args.provider_id, model=args.model, model_settings=model_settings)
         await agent.interactive_mode()
         
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")
     except Exception as e:
         print(f"❌ Error running agent: {e}")
-        logger.error(f"Error running agent {agent_id} with provider {provider_id}: {e}")
+        logger.error(f"Error running agent {args.agent_id} with provider {args.provider_id}: {e}")
 
 
 if __name__ == "__main__":

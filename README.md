@@ -12,6 +12,8 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 - **MCP Integration** - Model Context Protocol for external tools
 - **Tool Filtering** - Agent-specific permissions and authorization
 - **Prompt Management** - Dynamic system prompts with tool integration
+- **Model Configuration** - Flexible model selection and parameter management
+- **CLI Parameter Overrides** - Runtime model and setting customization
 - **Docker Support** - Multi-stage builds with development and production targets 
 - **Environment Configuration** - Flexible settings with environment variable support
 - **Structured Logging** - Comprehensive logging setup for debugging and monitoring
@@ -191,7 +193,7 @@ docker-compose --profile dev up --build
 ## 🤖 AI Agent & Tool Management
 
 ### Agent Configuration
-Configure agent-specific tool access and resources via `agent_config.json`:
+Configure agent-specific tool access, resources, and model settings via `agent_config.json`:
 
 ```json
 [
@@ -205,15 +207,24 @@ Configure agent-specific tool access and resources via `agent_config.json`:
       "fetch": ["fetch_url"]
     },
     "resources": ["memory"],
-    "provider": "azure_openai_cc"
+    "provider": "azure_openai_cc",
+    "model": "gpt-4o-mini",
+    "model_settings": {
+      "temperature": 0.7,
+      "max_tokens": 2000
+    }
   }
 ]
 ```
-
 **Resource Configuration:**
 - `resources` - Array of resource types available to the agent
 - Automatic resource creation when agents request access
 - Memory resources provide conversation persistence across sessions
+
+**Model Configuration:**
+- `model` - AI model identifier (e.g., "gpt-4o-mini", "qwen3:4b")
+- `model_settings` - Provider-specific parameters (temperature, max_tokens, num_ctx, etc.)
+- Settings are passed directly to the provider without validation for maximum flexibility
 
 ### MCP (Model Context Protocol) Integration
 I have included two example MCP servers for examples
@@ -248,6 +259,11 @@ The service includes a flexible prompt management system:
 - **Agent filtering** - Provider-agnostic tool management
 - **Health monitoring** - Provider status and metrics
 - **Error handling** - Robust error management
+- **Model settings** - Flexible parameter handling for provider-specific options
+  - Azure OpenAI: temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop, seed, response_format
+  - Ollama: num_ctx, num_predict, top_k, repeat_penalty, repeat_last_n, temperature, top_p
+  - Settings are passed directly to providers without validation for maximum flexibility
+  - Support for both agent config and CLI parameter overrides
 
 ## 🤖 Running Agents
 
@@ -264,7 +280,19 @@ python examples/run_agent.py cli_agent azure_openai_cc
 
 # Run the MCP-only agent
 python examples/run_agent.py mcp_agent azure_openai_cc
+
+# Override model and parameters via CLI
+python examples/run_agent.py cli_agent ollama --model qwen3:4b --setting num_ctx 200 --setting num_predict 200 --setting temperature 0.7
+
+# Use Azure OpenAI with custom settings
+python examples/run_agent.py research_agent azure_openai_cc --model gpt-4o-mini --setting temperature 0.8 --setting max_tokens 3000
 ```
+
+**CLI Parameter Override:**
+- `--model` - Override the model specified in agent config
+- `--setting key value` - Override individual model parameters
+- CLI settings take precedence over agent config settings
+- Supports any provider-specific parameters
 
 ### Memory Features
 - **Conversation Persistence** - Agents remember previous interactions
@@ -310,6 +338,11 @@ You: quit
 👋 Goodbye!
 ```
 
+Invoking a specific model and model parameters: 
+
+```bash
+$ python examples/run_agent.py cli_agent azure_openai_cc --model gpt-4o-mini --setting temperature 0.7 --setting max_tokens 2000
+```
 ### Agent Configuration
 
 Agents are configured in `agent_config.json`:
@@ -346,6 +379,13 @@ Agents are configured in `agent_config.json`:
 - Check file permissions and encoding (UTF-8)
 - Ensure prompt files are not empty
 
+**Model configuration issues:**
+- Verify model name is supported by the selected provider
+- Check that model settings are valid for the provider (e.g., num_ctx for Ollama, max_tokens for Azure OpenAI)
+- Ensure CLI parameter format is correct: `--setting key value`
+- Model settings in agent config take precedence over provider defaults
+- CLI settings take precedence over agent config settings
+
 ## 🧪 Testing
 
 ### Test Coverage
@@ -356,6 +396,8 @@ Agents are configured in `agent_config.json`:
 - **Prompt management** - System prompt loading and integration
 - **MCP integration** - End-to-end tool execution
 - **Provider compatibility** - All providers tested
+- **Model configuration** - Agent config model settings and CLI parameter overrides
+- **Model settings flow** - Testing of settings passing from agent config to providers
 
 ### Running Tests
 ```bash
