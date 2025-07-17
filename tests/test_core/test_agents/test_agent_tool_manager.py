@@ -10,6 +10,7 @@ from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
 from app.core.tools.function_calls.date_tool import DateTool
 from app.core.tools.function_calls.arithmetic_tool import ArithmeticTool
+import asyncio
 
 
 class TestAgentToolManager:
@@ -348,3 +349,221 @@ class TestAgentToolManager:
         assert agent_manager.config is not None
         assert "allowed_regular_tools" in agent_manager.config
         assert "allowed_mcp_servers" in agent_manager.config
+
+    @pytest.mark.asyncio
+    async def test_load_server_tools_command_based_mcp(self):
+        """Test loading tools from a command-based MCP server (like searxng)."""
+        agent_manager = AgentToolManager("research_agent")
+        
+        # Mock a command-based MCP server
+        mock_server = MagicMock()
+        mock_server.server_label = "searxng"
+        mock_server.server_url = None  # No URL for command-based servers
+        mock_server.command = "docker"
+        mock_server.args = [
+            "run", "-i", "--rm",
+            "-e", "SEARXNG_URL=https://searx.be",
+            "isokoliuk/mcp-searxng:latest"
+        ]
+        
+        # Mock the subprocess creation
+        mock_process = AsyncMock()
+        mock_process.stdin = AsyncMock()
+        mock_process.stdout = AsyncMock()
+        mock_process.stderr = AsyncMock()
+        
+        # Mock the SubprocessMCPClient
+        mock_subprocess_client = AsyncMock()
+        mock_tool = MagicMock()
+        mock_tool.name = "searxng_web_search"
+        mock_tool.description = "Search the web using Searxng"
+        mock_tool.inputSchema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        
+        mock_subprocess_client.list_tools.return_value = [mock_tool]
+        
+        # Fix: Use the correct patch path for asyncio
+        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            mock_subprocess.return_value = mock_process
+            
+            # Fix: Use the correct import path for SubprocessMCPClient
+            with patch('app.core.tools.subprocess_mcp_client.SubprocessMCPClient') as mock_client_class:
+                mock_client_class.return_value = mock_subprocess_client
+                
+                # Test the method
+                tools = await agent_manager.load_server_tools(mock_server)
+                
+                # Verify the results
+                assert len(tools) == 1
+                assert tools[0]["function"]["name"] == "searxng__searxng_web_search"
+                assert tools[0]["function"]["description"] == "Search the web using Searxng"
+                
+                # Verify subprocess was created with correct command
+                mock_subprocess.assert_called_once_with(
+                    "docker", "run", "-i", "--rm",
+                    "-e", "SEARXNG_URL=https://searx.be",
+                    "isokoliuk/mcp-searxng:latest",
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                
+                # Verify SubprocessMCPClient was created
+                mock_client_class.assert_called_once_with(mock_process)
+
+    @pytest.mark.asyncio
+    async def test_execute_mcp_tool_command_based_server(self):
+        """Test executing a tool from a command-based MCP server."""
+        agent_manager = AgentToolManager("research_agent")
+        agent_manager.config = {
+            "allowed_mcp_servers": ["searxng"],
+            "allowed_mcp_tools": {
+                "searxng": ["searxng_web_search"]
+            }
+        }
+        
+        # Mock the MCP servers
+        mock_server = MagicMock()
+        mock_server.server_label = "searxng"
+        mock_server.server_url = None  # Command-based server
+        mock_server.command = "docker"
+        mock_server.args = [
+            "run", "-i", "--rm",
+            "-e", "SEARXNG_URL=https://searx.be",
+            "isokoliuk/mcp-searxng:latest"
+        ]
+        
+        # Mock the subprocess creation
+        mock_process = AsyncMock()
+        mock_process.stdin = AsyncMock()
+        mock_process.stdout = AsyncMock()
+        mock_process.stderr = AsyncMock()
+        
+        # Mock the SubprocessMCPClient
+        mock_subprocess_client = AsyncMock()
+        mock_subprocess_client.call_tool.return_value = "Search results for 'AI news'"
+        
+        with patch('app.core.agents.agent_tool_manager.ToolRegistry.load_mcp_servers') as mock_load:
+            mock_load.return_value = [mock_server]
+            
+            # Fix: Use the correct patch path for asyncio
+            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+                mock_subprocess.return_value = mock_process
+                
+                # Fix: Use the correct import path for SubprocessMCPClient
+                with patch('app.core.tools.subprocess_mcp_client.SubprocessMCPClient') as mock_client_class:
+                    mock_client_class.return_value = mock_subprocess_client
+                    
+                    # Test the method
+                    result = await agent_manager.execute_mcp_tool("searxng__searxng_web_search", {"query": "AI news"})
+                    
+                    # Verify the result
+                    assert result == "Search results for 'AI news'"
+                    
+                    # Verify subprocess was created
+                    mock_subprocess.assert_called_once_with(
+                        "docker", "run", "-i", "--rm",
+                        "-e", "SEARXNG_URL=https://searx.be",
+                        "isokoliuk/mcp-searxng:latest",
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    
+                    # Verify tool was called with correct arguments
+                    mock_subprocess_client.call_tool.assert_called_once_with("searxng_web_search", {"query": "AI news"})
+
+    @pytest.mark.asyncio
+    async def test_load_server_tools_command_based_mcp_error_handling(self):
+        """Test error handling when command-based MCP server fails to start."""
+        agent_manager = AgentToolManager("research_agent")
+        
+        # Mock a command-based MCP server
+        mock_server = MagicMock()
+        mock_server.server_label = "searxng"
+        mock_server.server_url = None
+        mock_server.command = "docker"
+        mock_server.args = ["run", "-i", "--rm", "isokoliuk/mcp-searxng:latest"]
+        
+        # Mock subprocess creation to raise an exception
+        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            mock_subprocess.side_effect = FileNotFoundError("docker command not found")
+            
+            # Test that the method handles the error gracefully
+            tools = await agent_manager.load_server_tools(mock_server)
+            
+            # Should return empty list when server fails to start
+            assert tools == []
+            
+            # Verify subprocess was attempted
+            mock_subprocess.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_execute_mcp_tool_command_based_server_communication_error(self):
+        """Test error handling when command-based MCP server communication fails."""
+        agent_manager = AgentToolManager("research_agent")
+        agent_manager.config = {
+            "allowed_mcp_servers": ["searxng"],
+            "allowed_mcp_tools": {
+                "searxng": ["searxng_web_search"]
+            }
+        }
+        
+        # Mock the MCP servers
+        mock_server = MagicMock()
+        mock_server.server_label = "searxng"
+        mock_server.server_url = None
+        mock_server.command = "docker"
+        mock_server.args = ["run", "-i", "--rm", "isokoliuk/mcp-searxng:latest"]
+        
+        # Mock the subprocess creation
+        mock_process = AsyncMock()
+        
+        # Mock the SubprocessMCPClient to raise an exception
+        mock_subprocess_client = AsyncMock()
+        mock_subprocess_client.call_tool.side_effect = Exception("Communication failed")
+        
+        with patch('app.core.agents.agent_tool_manager.ToolRegistry.load_mcp_servers') as mock_load:
+            mock_load.return_value = [mock_server]
+            
+            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+                mock_subprocess.return_value = mock_process
+                
+                with patch('app.core.tools.subprocess_mcp_client.SubprocessMCPClient') as mock_client_class:
+                    mock_client_class.return_value = mock_subprocess_client
+                    
+                    # Test that the method handles communication errors
+                    with pytest.raises(Exception, match="Communication failed"):
+                        await agent_manager.execute_mcp_tool("searxng__searxng_web_search", {"query": "test"})
+
+    def test_mcp_model_command_based_server_validation(self):
+        """Test that MCP model correctly validates command-based server configurations."""
+        from app.models.tools.mcp import MCP
+        
+        # Test valid command-based server config
+        valid_command_server = MCP(
+            server_label="searxng",
+            command="docker",
+            args=["run", "-i", "--rm", "isokoliuk/mcp-searxng:latest"],
+            require_approval="never"
+        )
+        
+        assert valid_command_server.server_label == "searxng"
+        assert valid_command_server.command == "docker"
+        assert valid_command_server.args == ["run", "-i", "--rm", "isokoliuk/mcp-searxng:latest"]
+        assert valid_command_server.server_url is None
+        assert valid_command_server.header is None
+        
+        # Test valid HTTP-based server config (existing functionality)
+        valid_http_server = MCP(
+            server_label="deepwiki",
+            server_url="https://mcp.deepwiki.com/mcp",
+            require_approval="never",
+            header={"Authorization": ""}
+        )
+        
+        assert valid_http_server.server_label == "deepwiki"
+        assert valid_http_server.server_url == "https://mcp.deepwiki.com/mcp"
+        assert valid_http_server.command is None
+        assert valid_http_server.args is None
+
+   

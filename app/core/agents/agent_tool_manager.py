@@ -191,10 +191,33 @@ class AgentToolManager:
     
     async def load_server_tools(self, mcp_server) -> List[Dict[str, Any]]:
         """
-        Load tools from a specific MCP server (e.g., deepwiki, fetch).
+        Load tools from a specific MCP server (e.g., deepwiki, fetch, searxng).
         """
         try:
-            mcp_client = Client(mcp_server.server_url)
+            if mcp_server.server_url:
+                # HTTP-based MCP server (existing code)
+                mcp_client = Client(mcp_server.server_url)
+            elif mcp_server.command:
+                # Command-based MCP server (new code)
+                import subprocess
+                import asyncio
+                
+                # Create subprocess for command-based MCP
+                process = await asyncio.create_subprocess_exec(
+                    mcp_server.command, 
+                    *(mcp_server.args or []),
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                
+                # Use our custom subprocess MCP client
+                from app.core.tools.subprocess_mcp_client import SubprocessMCPClient
+                mcp_client = SubprocessMCPClient(process)
+            else:
+                logger.error(f"MCP server {mcp_server.server_label} has no server_url or command")
+                return []
+                
             async with mcp_client:
                 server_tools = await mcp_client.list_tools()
                 formatted_tools = ToolRegistry.convert_mcp_tools_to_chatcompletions(
@@ -238,7 +261,7 @@ class AgentToolManager:
     
     async def execute_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
         """
-        Execute an MCP tool (e.g., from deepwiki or fetch servers).
+        Execute an MCP tool (e.g., from deepwiki, fetch, or searxng servers).
         """
         separator = "__"
         mcp_server_label, actual_tool_name = tool_name.split(separator, 1)
@@ -268,7 +291,27 @@ class AgentToolManager:
             raise ValueError(f"MCP server {mcp_server_label} not found")
         
         server = servers_by_label[mcp_server_label]
-        client = Client(server.server_url)
+        
+        if server.server_url:
+            # HTTP-based server (existing code)
+            client = Client(server.server_url)
+        elif server.command:
+            # Command-based server (new code)
+            import subprocess
+            import asyncio
+            
+            process = await asyncio.create_subprocess_exec(
+                server.command, 
+                *(server.args or []),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            from app.core.tools.subprocess_mcp_client import SubprocessMCPClient
+            client = SubprocessMCPClient(process)
+        else:
+            raise ValueError(f"MCP server {mcp_server_label} has no server_url or command")
         
         async with client:
             result = await client.call_tool(actual_tool_name, arguments)

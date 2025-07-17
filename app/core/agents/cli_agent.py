@@ -136,7 +136,7 @@ class CLIAgent:
         print(f"🤖 {self.agent_id} Agent Ready!")
         print(f"🛠️ Available tools: {len(self.available_tools)}")
         print(f"🧠 Memory: {'Enabled' if self.memory_resource else 'Disabled'}")
-        print(f"📝 System prompt: {self.prompt_manager.get_system_prompt()[:50]}...")
+        print(f"📝 System prompt: {self.prompt_manager.get_system_prompt()}...")
         print("💬 Type 'quit' to exit\n")
         
         while True:
