@@ -27,6 +27,11 @@ RUN pip install --upgrade pip && \
 
 # Copy application code
 COPY app/ /app/app/
+COPY pyproject.toml /app/
+COPY ai_agent_service.egg-info/ /app/ai_agent_service.egg-info/
+
+# Install the package in editable mode
+RUN pip install -e /app
 
 # Expose port and run
 EXPOSE 8000

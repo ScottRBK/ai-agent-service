@@ -49,5 +49,15 @@
       "num_predict": 30000
     },
     "resources": ["memory"]
+  },
+  {
+    "agent_id": "azure_agent",
+    "system_prompt_file": "prompts/cli_agent.txt",
+    "allowed_regular_tools": ["get_current_datetime"],
+    "allowed_mcp_servers": null,
+    "allowed_mcp_tools": null,
+    "provider": "azure_openai",
+    "model": "gpt-4o-mini",
+    "resources": ["memory"]
   }
 ] 

@@ -33,6 +33,7 @@ def print_usage():
     print()
     print("Usage:")
     print("  python examples/run_agent.py [agent_id] [provider_id]")
+    print("  python examples/run_agent.py [agent_id]  # Uses provider from agent config")
     print()
     print("Available Agents:")
     print("  research_agent  - Has access to datetime, deepwiki, fetch tools")
@@ -40,6 +41,7 @@ def print_usage():
     print("  mcp_agent      - Has access to MCP tools only (deepwiki, fetch)")
     print("  restricted_agent - Limited access to specific tools")
     print("  cli_agent      - Has access to datetime tool and all MCP tools")
+    print("  azure_agent    - Azure OpenAI agent with memory")
     print()
     print("Available Providers:")
     print("  azure_openai_cc - Azure OpenAI (Chat Completions)")
@@ -48,6 +50,8 @@ def print_usage():
     print()
     print("Examples:")
     print("  python examples/run_agent.py research_agent azure_openai_cc")
+    print("  python examples/run_agent.py cli_agent  # Uses provider from agent config")
+    print("  python examples/run_agent.py azure_agent  # Uses Azure OpenAI from config")
     print("  python examples/run_agent.py data_agent ollama")
     print("  python examples/run_agent.py mcp_agent azure_openai_cc")
     print()
@@ -78,7 +82,7 @@ def validate_provider(provider_id: str) -> bool:
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run AI agents with custom settings")
     parser.add_argument("agent_id", help="Agent ID to run")
-    parser.add_argument("provider_id", help="Provider ID to use")
+    parser.add_argument("provider_id", nargs="?", help="Provider ID to use (optional, will use agent config if not specified)")
     parser.add_argument("--model", help="Model to use")
     
     # Generic settings - any key-value pair
@@ -87,6 +91,21 @@ def parse_arguments():
                        help="Model setting KEY VALUE (can be used multiple times)")
     
     return parser.parse_args()
+
+def get_provider_from_agent_config(agent_id: str) -> str:
+    """Get the provider from agent configuration."""
+    try:
+        from app.core.agents.agent_tool_manager import AgentToolManager
+        agent_manager = AgentToolManager(agent_id)
+        provider = agent_manager.config.get("provider")
+        if provider:
+            return provider
+        else:
+            logger.warning(f"No provider specified in agent config for {agent_id}, using default")
+            return "azure_openai_cc"  # Default fallback
+    except Exception as e:
+        logger.error(f"Error getting provider from agent config for {agent_id}: {e}")
+        return "azure_openai_cc"  # Default fallback
 
 def parse_setting_value(value):
     """Parse a setting value, trying to convert to appropriate type."""
@@ -112,6 +131,12 @@ def parse_setting_value(value):
 async def main():
     args = parse_arguments()
     
+    # Get provider - use CLI argument if provided, otherwise get from agent config
+    provider_id = args.provider_id
+    if not provider_id:
+        provider_id = get_provider_from_agent_config(args.agent_id)
+        print(f"📋 Using provider '{provider_id}' from agent configuration")
+    
     # Build model settings dictionary
     model_settings = {}
     
@@ -120,7 +145,7 @@ async def main():
         for key, value in args.setting:
             model_settings[key] = parse_setting_value(value)
     
-    print(f"🤖 Starting {args.agent_id} agent with {args.provider_id} provider...")
+    print(f"🤖 Starting {args.agent_id} agent with {provider_id} provider...")
     if model_settings:
         print(f"⚙️  Model settings: {model_settings}")
     print()
@@ -133,27 +158,27 @@ async def main():
         print_usage()
         return
     
-    if not validate_provider(args.provider_id):
-        print(f"❌ Provider '{args.provider_id}' not available")
+    if not validate_provider(provider_id):
+        print(f"❌ Provider '{provider_id}' not available")
         print("   Check your provider configuration")
         print()
         print_usage()
         return
     
     print(f"✅ Agent '{args.agent_id}' validated")
-    print(f"✅ Provider '{args.provider_id}' validated")
+    print(f"✅ Provider '{provider_id}' validated")
     print()
     
     try:
         # Create agent with settings
-        agent = CLIAgent(args.agent_id, args.provider_id, model=args.model, model_settings=model_settings)
+        agent = CLIAgent(args.agent_id, provider_id, model=args.model, model_settings=model_settings)
         await agent.interactive_mode()
         
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")
     except Exception as e:
         print(f"❌ Error running agent: {e}")
-        logger.error(f"Error running agent {args.agent_id} with provider {args.provider_id}: {e}")
+        logger.error(f"Error running agent {args.agent_id} with provider {provider_id}: {e}")
 
 
 if __name__ == "__main__":
