@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     PORT: int = 8000
     LOG_LEVEL: str = "DEBUG"
 
+    # Configuration File Paths
+    AGENT_CONFIG_PATH: str = "agent_config.json"
+    MCP_CONFIG_PATH: str = "mcp.json"
+    PROMPTS_DIR_PATH: str = "prompts"
+
     # AZURE OpenAI Configuration
     AZURE_OPENAI_BASE_URL: str = "https://{your-custom-endpoint}.openai.azure.com/"
     AZURE_OPENAI_DEFAULT_MODEL: str = "gpt-4.1-nano"

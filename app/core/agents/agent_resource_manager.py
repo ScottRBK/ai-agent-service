@@ -27,7 +27,8 @@ class AgentResourceManager:
         Load agent configuration from agent_config.json or return default config.
         """
         try:
-            config_path = "agent_config.json"
+            from app.config.settings import settings
+            config_path = settings.AGENT_CONFIG_PATH
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     all_configs = json.load(f)

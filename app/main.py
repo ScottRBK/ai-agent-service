@@ -1,10 +1,13 @@
 """
 FastAPI application entry point for Agent Service.
 """
+from fastapi import FastAPI
 from app.config.settings import settings
 from app.utils.logging import logger
 from app.api.routes.health import router as health_router
-from fastapi import FastAPI
+from app.api.routes.agents import router as agents_router
+from app.api.routes.openai_compatible import router as openai_router
+
 app = FastAPI(
     title=settings.SERVICE_NAME,
     description=settings.SERVICE_DESCRIPTION,
@@ -14,6 +17,8 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(agents_router)
+app.include_router(openai_router)
 
 @app.get("/")
 async def root():
@@ -23,7 +28,12 @@ async def root():
         "service": settings.SERVICE_NAME,
         "version": settings.SERVICE_VERSION,
         "status": "running",
-        "docs": "/docs"
+        "docs": "/docs",
+        "endpoints": {
+            "agents": "/agents",
+            "openai_compatible": "/v1",
+            "health": "/health"
+        }
     }
 
 

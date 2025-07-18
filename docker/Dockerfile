@@ -16,6 +16,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     PYTHONPATH="/app"
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv globally
+RUN pip install uv
+
 # Copy requirements first for better caching
 COPY requirements.txt /tmp/requirements.txt
 
@@ -32,6 +41,9 @@ COPY ai_agent_service.egg-info/ /app/ai_agent_service.egg-info/
 
 # Install the package in editable mode
 RUN pip install -e /app
+
+# Create config directory for mounted files
+RUN mkdir -p /app/config
 
 # Expose port and run
 EXPOSE 8000

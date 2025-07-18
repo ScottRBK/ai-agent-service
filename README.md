@@ -116,6 +116,23 @@ The application uses environment-based configuration with sensible defaults:
 | `HOST` | "0.0.0.0" | Server host address |
 | `PORT` | 8000 | Server port |
 | `LOG_LEVEL` | "DEBUG" | Logging level |
+| `AGENT_CONFIG_PATH` | "agent_config.json" | Path to agent configuration file |
+| `MCP_CONFIG_PATH` | "mcp.json" | Path to MCP server configuration file |
+| `PROMPTS_DIR_PATH` | "prompts" | Path to prompts directory |
+
+### Configuration File Management
+
+The service supports flexible configuration file management through environment variables and Docker volume mounts:
+
+#### Environment Variables
+- `AGENT_CONFIG_PATH`: Path to the agent configuration file (inside container)
+- `MCP_CONFIG_PATH`: Path to the MCP server configuration file (inside container)  
+- `PROMPTS_DIR_PATH`: Path to the prompts directory (inside container)
+
+#### Docker Volume Mounts
+- `AGENT_CONFIG_FILE`: Host path to agent_config.json
+- `MCP_CONFIG_FILE`: Host path to mcp.json
+- `PROMPTS_DIR`: Host path to prompts directory
 
 ### Environment Files
 
@@ -126,6 +143,42 @@ Create a `.env` file in the `docker/` directory to override defaults:
 PORT=8001
 LOG_LEVEL=INFO
 DEV_CONTAINER_NAME=my-agent-service
+
+# Configuration file paths (inside container)
+AGENT_CONFIG_PATH=/app/config/agent_config.json
+MCP_CONFIG_PATH=/app/config/mcp.json
+PROMPTS_DIR_PATH=/app/config/prompts
+
+# Configuration file mounts (host paths)
+AGENT_CONFIG_FILE=../agent_config.json
+MCP_CONFIG_FILE=../mcp.json
+PROMPTS_DIR=../prompts
+```
+
+### Docker Configuration Examples
+
+#### Basic Usage (Default Paths)
+```bash
+cd docker
+docker-compose --profile dev up --build
+```
+
+#### Custom Configuration Paths
+```bash
+# Using custom configuration files
+AGENT_CONFIG_FILE=/path/to/custom/agent_config.json \
+MCP_CONFIG_FILE=/path/to/custom/mcp.json \
+PROMPTS_DIR=/path/to/custom/prompts \
+docker-compose --profile dev up --build
+```
+
+#### Environment Variable Override
+```bash
+# Override configuration paths via environment variables
+AGENT_CONFIG_PATH=/custom/config/agents.json \
+MCP_CONFIG_PATH=/custom/config/mcp_servers.json \
+PROMPTS_DIR_PATH=/custom/prompts \
+docker-compose --profile dev up --build
 ```
 
 ## 📡 API Endpoints

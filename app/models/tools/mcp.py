@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 class MCPHeader(BaseModel):
     """Response MCP header model"""
@@ -13,4 +13,5 @@ class MCP(BaseModel):
     args: Optional[List[str]] = None  # Add args support
     require_approval: str
     header: Optional[MCPHeader] = None  # Make optional for command-based servers
+    env: Optional[Dict[str, str]] = None  # Add environment variables support
 

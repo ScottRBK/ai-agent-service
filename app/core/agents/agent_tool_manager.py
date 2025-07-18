@@ -54,7 +54,8 @@ class AgentToolManager:
         }
         """
         try:
-            config_path = "agent_config.json"
+            from app.config.settings import settings
+            config_path = settings.AGENT_CONFIG_PATH
             if os.path.exists(config_path):
                 with open(config_path, "r") as f:
                     all_configs = json.load(f)
@@ -198,22 +199,22 @@ class AgentToolManager:
                 # HTTP-based MCP server (existing code)
                 mcp_client = Client(mcp_server.server_url)
             elif mcp_server.command:
-                # Command-based MCP server (new code)
-                import subprocess
-                import asyncio
+                # Command-based MCP server using fastmcp StdioTransport
+                from fastmcp.client.transports import StdioTransport
                 
-                # Create subprocess for command-based MCP
-                process = await asyncio.create_subprocess_exec(
-                    mcp_server.command, 
-                    *(mcp_server.args or []),
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                # Prepare environment variables
+                env = os.environ.copy()  # Start with current environment
+                if mcp_server.env:
+                    env.update(mcp_server.env)  # Add MCP server specific env vars
+                
+                # Create StdioTransport for command-based MCP
+                transport = StdioTransport(
+                    command=mcp_server.command,
+                    args=mcp_server.args or [],
+                    env=env,
+                    keep_alive=False
                 )
-                
-                # Use our custom subprocess MCP client
-                from app.core.tools.subprocess_mcp_client import SubprocessMCPClient
-                mcp_client = SubprocessMCPClient(process)
+                mcp_client = Client(transport)
             else:
                 logger.error(f"MCP server {mcp_server.server_label} has no server_url or command")
                 return []
@@ -223,6 +224,7 @@ class AgentToolManager:
                 formatted_tools = ToolRegistry.convert_mcp_tools_to_chatcompletions(
                     mcp_server.server_label, server_tools
                 )
+                await mcp_client.close()
                 return formatted_tools
         except Exception as e:
             logger.error(f"Error loading tools from MCP server {mcp_server.server_label}: {e}")
@@ -296,26 +298,33 @@ class AgentToolManager:
             # HTTP-based server (existing code)
             client = Client(server.server_url)
         elif server.command:
-            # Command-based server (new code)
-            import subprocess
-            import asyncio
+            # Command-based server using fastmcp StdioTransport
+            from fastmcp.client.transports import StdioTransport
             
-            process = await asyncio.create_subprocess_exec(
-                server.command, 
-                *(server.args or []),
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+            # Prepare environment variables
+            env = os.environ.copy()  # Start with current environment
+            if server.env:
+                env.update(server.env)  # Add MCP server specific env vars
+            
+            transport = StdioTransport(
+                command=server.command,
+                args=server.args or [],
+                env=env,
+                keep_alive=False
             )
-            
-            from app.core.tools.subprocess_mcp_client import SubprocessMCPClient
-            client = SubprocessMCPClient(process)
+            client = Client(transport)
         else:
             raise ValueError(f"MCP server {mcp_server_label} has no server_url or command")
         
-        async with client:
-            result = await client.call_tool(actual_tool_name, arguments)
-            return str(result)
+        try:
+            async with client:
+                result = await client.call_tool(actual_tool_name, arguments)
+                await client.close()
+                return str(result)
+        except Exception as e:
+            # Return the error message as a string so the LLM can see it
+            logger.error(f"Error executing MCP tool {tool_name}: {e}")
+            return f"Tool execution failed: {str(e)}"
     
     def clear_cache(self):
         """Clear all cached data."""

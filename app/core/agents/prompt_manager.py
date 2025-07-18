@@ -38,6 +38,11 @@ class PromptManager:
     def load_prompt_from_file(self, file_path: str) -> str:
         """Load prompt from external file."""
         try:
+            from app.config.settings import settings
+            # If the file path is relative, prepend the prompts directory
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(settings.PROMPTS_DIR_PATH, file_path)
+            
             if os.path.exists(file_path):
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read().strip()

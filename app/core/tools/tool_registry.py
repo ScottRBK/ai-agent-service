@@ -55,7 +55,9 @@ class ToolRegistry:
         Loads the MCP servers from the mcp.json file.
         """
         try:
-            with open("mcp.json", "r") as f:
+            from app.config.settings import settings
+            config_path = settings.MCP_CONFIG_PATH
+            with open(config_path, "r") as f:
                 mcp_data = json.load(f)
             
             if isinstance(mcp_data, dict):
@@ -69,7 +71,7 @@ class ToolRegistry:
             return [MCP(**server) for server in mcp_servers]
         
         except FileNotFoundError:
-            logger.error("mcp.json file not found")
+            logger.error(f"mcp.json file not found at {config_path}")
             return []
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in mcp.json: {e}")

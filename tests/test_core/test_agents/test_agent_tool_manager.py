@@ -11,6 +11,7 @@ from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
 from app.core.tools.function_calls.date_tool import DateTool
 from app.core.tools.function_calls.arithmetic_tool import ArithmeticTool
 import asyncio
+import os
 
 
 class TestAgentToolManager:
@@ -366,28 +367,28 @@ class TestAgentToolManager:
             "isokoliuk/mcp-searxng:latest"
         ]
         
-        # Mock the subprocess creation
-        mock_process = AsyncMock()
-        mock_process.stdin = AsyncMock()
-        mock_process.stdout = AsyncMock()
-        mock_process.stderr = AsyncMock()
-        
-        # Mock the SubprocessMCPClient
-        mock_subprocess_client = AsyncMock()
+        # Mock the MCP tools
         mock_tool = MagicMock()
         mock_tool.name = "searxng_web_search"
         mock_tool.description = "Search the web using Searxng"
         mock_tool.inputSchema = {"type": "object", "properties": {"query": {"type": "string"}}}
         
-        mock_subprocess_client.list_tools.return_value = [mock_tool]
+        # Mock the fastmcp Client and StdioTransport
+        mock_client = AsyncMock()
+        mock_client.list_tools.return_value = [mock_tool]
+        mock_client.close = AsyncMock()
         
-        # Fix: Use the correct patch path for asyncio
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-            mock_subprocess.return_value = mock_process
+        # Mock the StdioTransport
+        mock_transport = MagicMock()
+        
+        # Patch at the source module level since StdioTransport is imported inside the method
+        with patch('fastmcp.client.transports.StdioTransport') as mock_transport_class:
+            mock_transport_class.return_value = mock_transport
             
-            # Fix: Use the correct import path for SubprocessMCPClient
-            with patch('app.core.tools.subprocess_mcp_client.SubprocessMCPClient') as mock_client_class:
-                mock_client_class.return_value = mock_subprocess_client
+            with patch('app.core.agents.agent_tool_manager.Client') as mock_client_class:
+                mock_client_class.return_value = mock_client
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
                 
                 # Test the method
                 tools = await agent_manager.load_server_tools(mock_server)
@@ -397,18 +398,24 @@ class TestAgentToolManager:
                 assert tools[0]["function"]["name"] == "searxng__searxng_web_search"
                 assert tools[0]["function"]["description"] == "Search the web using Searxng"
                 
-                # Verify subprocess was created with correct command
-                mock_subprocess.assert_called_once_with(
-                    "docker", "run", "-i", "--rm",
-                    "-e", "SEARXNG_URL=https://searx.be",
-                    "isokoliuk/mcp-searxng:latest",
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                # Verify StdioTransport was created with correct parameters
+                mock_transport_class.assert_called_once_with(
+                    command="docker",
+                    args=[
+                        "run", "-i", "--rm",
+                        "-e", "SEARXNG_URL=https://searx.be",
+                        "isokoliuk/mcp-searxng:latest"
+                    ],
+                    env=os.environ.copy(),
+                    keep_alive=False
                 )
                 
-                # Verify SubprocessMCPClient was created
-                mock_client_class.assert_called_once_with(mock_process)
+                # Verify Client was created with the transport
+                mock_client_class.assert_called_once_with(mock_transport)
+                
+                # Verify list_tools was called
+                mock_client.list_tools.assert_called_once()
+                mock_client.close.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_mcp_tool_command_based_server(self):
@@ -432,26 +439,25 @@ class TestAgentToolManager:
             "isokoliuk/mcp-searxng:latest"
         ]
         
-        # Mock the subprocess creation
-        mock_process = AsyncMock()
-        mock_process.stdin = AsyncMock()
-        mock_process.stdout = AsyncMock()
-        mock_process.stderr = AsyncMock()
+        # Mock the fastmcp Client and StdioTransport
+        mock_client = AsyncMock()
+        mock_client.call_tool.return_value = "Search results for 'AI news'"
+        mock_client.close = AsyncMock()
         
-        # Mock the SubprocessMCPClient
-        mock_subprocess_client = AsyncMock()
-        mock_subprocess_client.call_tool.return_value = "Search results for 'AI news'"
+        # Mock the StdioTransport
+        mock_transport = MagicMock()
         
         with patch('app.core.agents.agent_tool_manager.ToolRegistry.load_mcp_servers') as mock_load:
             mock_load.return_value = [mock_server]
             
-            # Fix: Use the correct patch path for asyncio
-            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-                mock_subprocess.return_value = mock_process
+            # Patch at the source module level since StdioTransport is imported inside the method
+            with patch('fastmcp.client.transports.StdioTransport') as mock_transport_class:
+                mock_transport_class.return_value = mock_transport
                 
-                # Fix: Use the correct import path for SubprocessMCPClient
-                with patch('app.core.tools.subprocess_mcp_client.SubprocessMCPClient') as mock_client_class:
-                    mock_client_class.return_value = mock_subprocess_client
+                with patch('app.core.agents.agent_tool_manager.Client') as mock_client_class:
+                    mock_client_class.return_value = mock_client
+                    mock_client.__aenter__.return_value = mock_client
+                    mock_client.__aexit__.return_value = None
                     
                     # Test the method
                     result = await agent_manager.execute_mcp_tool("searxng__searxng_web_search", {"query": "AI news"})
@@ -459,18 +465,24 @@ class TestAgentToolManager:
                     # Verify the result
                     assert result == "Search results for 'AI news'"
                     
-                    # Verify subprocess was created
-                    mock_subprocess.assert_called_once_with(
-                        "docker", "run", "-i", "--rm",
-                        "-e", "SEARXNG_URL=https://searx.be",
-                        "isokoliuk/mcp-searxng:latest",
-                        stdin=asyncio.subprocess.PIPE,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
+                    # Verify StdioTransport was created
+                    mock_transport_class.assert_called_once_with(
+                        command="docker",
+                        args=[
+                            "run", "-i", "--rm",
+                            "-e", "SEARXNG_URL=https://searx.be",
+                            "isokoliuk/mcp-searxng:latest"
+                        ],
+                        env=os.environ.copy(),
+                        keep_alive=False
                     )
                     
+                    # Verify Client was created with the transport
+                    mock_client_class.assert_called_once_with(mock_transport)
+                    
                     # Verify tool was called with correct arguments
-                    mock_subprocess_client.call_tool.assert_called_once_with("searxng_web_search", {"query": "AI news"})
+                    mock_client.call_tool.assert_called_once_with("searxng_web_search", {"query": "AI news"})
+                    mock_client.close.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_load_server_tools_command_based_mcp_error_handling(self):
@@ -484,9 +496,9 @@ class TestAgentToolManager:
         mock_server.command = "docker"
         mock_server.args = ["run", "-i", "--rm", "isokoliuk/mcp-searxng:latest"]
         
-        # Mock subprocess creation to raise an exception
-        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-            mock_subprocess.side_effect = FileNotFoundError("docker command not found")
+        # Mock StdioTransport to raise an exception - patch at source module level
+        with patch('fastmcp.client.transports.StdioTransport') as mock_transport_class:
+            mock_transport_class.side_effect = FileNotFoundError("docker command not found")
             
             # Test that the method handles the error gracefully
             tools = await agent_manager.load_server_tools(mock_server)
@@ -494,8 +506,8 @@ class TestAgentToolManager:
             # Should return empty list when server fails to start
             assert tools == []
             
-            # Verify subprocess was attempted
-            mock_subprocess.assert_called_once()
+            # Verify StdioTransport was attempted
+            mock_transport_class.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_mcp_tool_command_based_server_communication_error(self):
@@ -515,25 +527,31 @@ class TestAgentToolManager:
         mock_server.command = "docker"
         mock_server.args = ["run", "-i", "--rm", "isokoliuk/mcp-searxng:latest"]
         
-        # Mock the subprocess creation
-        mock_process = AsyncMock()
+        # Mock the fastmcp Client to raise an exception
+        mock_client = AsyncMock()
+        mock_client.call_tool.side_effect = Exception("Communication failed")
+        mock_client.close = AsyncMock()
         
-        # Mock the SubprocessMCPClient to raise an exception
-        mock_subprocess_client = AsyncMock()
-        mock_subprocess_client.call_tool.side_effect = Exception("Communication failed")
+        # Mock the StdioTransport
+        mock_transport = MagicMock()
         
         with patch('app.core.agents.agent_tool_manager.ToolRegistry.load_mcp_servers') as mock_load:
             mock_load.return_value = [mock_server]
             
-            with patch('asyncio.create_subprocess_exec') as mock_subprocess:
-                mock_subprocess.return_value = mock_process
+            # Patch at the source module level since StdioTransport is imported inside the method
+            with patch('fastmcp.client.transports.StdioTransport') as mock_transport_class:
+                mock_transport_class.return_value = mock_transport
                 
-                with patch('app.core.tools.subprocess_mcp_client.SubprocessMCPClient') as mock_client_class:
-                    mock_client_class.return_value = mock_subprocess_client
+                with patch('app.core.agents.agent_tool_manager.Client') as mock_client_class:
+                    mock_client_class.return_value = mock_client
+                    mock_client.__aenter__.return_value = mock_client
+                    mock_client.__aexit__.return_value = None
                     
                     # Test that the method handles communication errors
-                    with pytest.raises(Exception, match="Communication failed"):
-                        await agent_manager.execute_mcp_tool("searxng__searxng_web_search", {"query": "test"})
+                    result = await agent_manager.execute_mcp_tool("searxng__searxng_web_search", {"query": "test"})
+                    
+                    # Should return error message as string
+                    assert "Tool execution failed: Communication failed" in result
 
     def test_mcp_model_command_based_server_validation(self):
         """Test that MCP model correctly validates command-based server configurations."""
