@@ -9,7 +9,7 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 - **AI Agent Capabilities** - Intelligent automation and decision-making
 - **Health Check Endpoints** - Built-in monitoring and status endpoints
 - **Multi-Provider AI Support** - Azure OpenAI, Ollama with unified interface
-- **MCP Integration** - Model Context Protocol for external tools
+- **MCP Integration** - Model Context Protocol for external tools using fastmcp library
 - **Tool Filtering** - Agent-specific permissions and authorization
 - **Prompt Management** - Dynamic system prompts with tool integration
 - **Model Configuration** - Flexible model selection and parameter management
@@ -69,12 +69,16 @@ ai-agent-service/
 │   ├── api/
 │   │   └── routes/
 │   │       ├── __init__.py
-│   │       └── health.py
+│   │       ├── health.py              # Health check endpoints
+│   │       ├── agents.py              # Agent management API
+│   │       └── openai_compatible.py   # OpenAI-compatible API
 │   ├── core/
 │   │   ├── agents/
-│   │   │   ├── agent_tool_manager.py    # Agent tool filtering
+│   │   │   ├── agent_tool_manager.py    # Agent tool filtering with fastmcp
 │   │   │   ├── agent_resource_manager.py # Agent resource management
-│   │   │   └── prompt_manager.py        # System prompt management
+│   │   │   ├── prompt_manager.py        # System prompt management
+│   │   │   ├── cli_agent.py             # CLI agent implementation
+│   │   │   └── api_agent.py             # API agent implementation
 │   │   ├── providers/
 │   │   │   ├── base.py                  # Base provider interface
 │   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API)
@@ -88,10 +92,13 @@ ai-agent-service/
 │   │       ├── tool_registry.py         # Tool management
 │   │       └── function_calls/          # Built-in tools
 │   ├── config/
+│   │   └── settings.py                  # Application configuration
 │   ├── models/
+│   │   ├── agents.py                    # Agent API models
 │   │   └── resources/
 │   │       └── memory.py                # Memory data models
 │   └── utils/
+│       └── logging.py                   # Logging configuration
 ├── tests/
 │   ├── test_core/
 │   │   ├── test_agents/                 # Agent unit tests
@@ -99,6 +106,11 @@ ai-agent-service/
 │   │   ├── test_resources/              # Resource tests
 │   │   └── test_tools/                  # Tool tests
 │   └── test_integration/                # End-to-end tests
+├── examples/
+│   └── run_agent.py                     # CLI agent runner
+├── docker/
+│   ├── Dockerfile                       # Multi-stage Docker build
+│   └── docker-compose.yml               # Development environment
 ├── agent_config.json                    # Agent configurations
 ├── prompts/                             # System Prompt Files per agent
 ├── mcp.json                             # MCP server config
@@ -254,10 +266,11 @@ Configure agent-specific tool access, resources, and model settings via `agent_c
     "agent_id": "research_agent",
     "system_prompt_file": "prompts/research_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "fetch"],
+    "allowed_mcp_servers": ["deepwiki", "fetch", "searxng"],
     "allowed_mcp_tools": {
       "deepwiki": ["read_wiki_structure", "search_wiki"],
-      "fetch": ["fetch_url"]
+      "fetch": ["fetch_url"],
+      "searxng": ["searxng_web_search"]
     },
     "resources": ["memory"],
     "provider": "azure_openai_cc",
@@ -280,15 +293,20 @@ Configure agent-specific tool access, resources, and model settings via `agent_c
 - Settings are passed directly to the provider without validation for maximum flexibility
 
 ### MCP (Model Context Protocol) Integration
-I have included two example MCP servers for examples
+The service supports both HTTP-based and command-based MCP servers using the fastmcp library:
+
+- **HTTP-based Servers**: DeepWiki, Fetch - Connect via URLs with standard HTTP/WebSocket
+- **Command-based Servers**: Searxng and other local/containerized servers - Use fastmcp StdioTransport for subprocess execution
 - **DeepWiki Server** - Interrogate information on Deepwiki page, https://docs.devin.ai/work-with-devin/deepwiki-mcp
-- **Fetch Server** - An MCP server that provides web content fetching capabilities. This server enables LLMs to retrieve and process content from web pages, converting HTML to markdown for easier consumption 
-- **Extensible** - Add custom MCP servers via `mcp.json`
+- **Fetch Server** - An MCP server that provides web content fetching capabilities. This server enables LLMs to retrieve and process content from web pages, converting HTML to markdown for easier consumption
+- **Searxng Server** - Web search capabilities via Docker container using fastmcp StdioTransport
+- **Extensible** - Add custom MCP servers via `mcp.json` with support for both server types
 
 ### Tool Filtering
 - **Agent-specific permissions** - Control which tools each agent can access
 - **Regular tools** - Built-in functions like date/time, arithmetic, these are both just very basic examples 
 - **MCP tools** - External server capabilities with proper authorization
+- **Dual protocol support** - HTTP-based and command-based MCP servers with standardized fastmcp implementation
 
 ### System Prompt Management
 The service includes a flexible prompt management system:
@@ -308,10 +326,10 @@ The service includes a flexible prompt management system:
 - **Ollama** - Full MCP integration
 
 ### Provider Features
-- **Tool calling** - Execute functions and MCP tools
+- **Tool calling** - Execute functions and MCP tools (HTTP and command-based)
 - **Agent filtering** - Provider-agnostic tool management
 - **Health monitoring** - Provider status and metrics
-- **Error handling** - Robust error management
+- **Error handling** - Robust error management with fastmcp integration
 - **Model settings** - Flexible parameter handling for provider-specific options
   - Azure OpenAI: temperature, max_tokens, top_p, frequency_penalty, presence_penalty, stop, seed, response_format
   - Ollama: num_ctx, num_predict, top_k, repeat_penalty, repeat_last_n, temperature, top_p
@@ -325,13 +343,13 @@ The service includes a flexible prompt management system:
 Use the example script to run different agents with various providers and memory:
 
 ```bash
-# Run the research agent with Azure OpenAI and memory
+# Run the research agent with Azure OpenAI and memory (includes Searxng web search)
 python examples/run_agent.py research_agent azure_openai_cc
 
-# Run the CLI agent with conversation memory
+# Run the CLI agent with conversation memory (full MCP access including command-based servers)
 python examples/run_agent.py cli_agent azure_openai_cc
 
-# Run the MCP-only agent
+# Run the MCP-only agent (HTTP and command-based MCP servers)
 python examples/run_agent.py mcp_agent azure_openai_cc
 
 # Override model and parameters via CLI
@@ -340,6 +358,11 @@ python examples/run_agent.py cli_agent ollama --model qwen3:4b --setting num_ctx
 # Use Azure OpenAI with custom settings
 python examples/run_agent.py research_agent azure_openai_cc --model gpt-4o-mini --setting temperature 0.8 --setting max_tokens 3000
 ```
+
+**MCP Server Access:**
+- **HTTP-based**: DeepWiki, Fetch - Available immediately
+- **Command-based**: Searxng - Requires Docker container running, uses fastmcp StdioTransport
+- **Mixed usage**: Agents can use both types simultaneously
 
 **CLI Parameter Override:**
 - `--model` - Override the model specified in agent config
@@ -357,10 +380,11 @@ python examples/run_agent.py research_agent azure_openai_cc --model gpt-4o-mini 
 
 | Agent | Description | Tools Available |
 |-------|-------------|-----------------|
-| `research_agent` | Research assistant with web access | datetime, deepwiki, fetch |
-| `data_agent` | Data analysis specialist | datetime, arithmetic |
-| `mcp_agent` | MCP tools only | deepwiki, fetch |
+| `research_agent` | Research assistant with web access | datetime, deepwiki, fetch, searxng |
+| `cli_agent` | Command-line interface assistant | datetime, all MCP tools (HTTP and command-based) |
+| `mcp_agent` | MCP tools only | deepwiki, fetch, searxng (no regular tools) |
 | `restricted_agent` | Limited access example | specific tools only |
+| `regular_tools_only_agent` | Basic functionality without MCP | datetime, arithmetic |
 
 ### Available Providers
 
@@ -383,9 +407,9 @@ You: What's the current time in Tokyo?
 🤔 Thinking...
 🤖 research_agent: The current time in Tokyo is 2025-01-16 15:30:45.
 
-You: Research Python async programming
+You: Search for the latest AI news
 🤔 Thinking...
-🤖 research_agent: I'll search for information about Python async programming...
+🤖 research_agent: I'll search for the latest AI news using web search...
 
 You: quit
 👋 Goodbye!
@@ -396,6 +420,134 @@ Invoking a specific model and model parameters:
 ```bash
 $ python examples/run_agent.py cli_agent azure_openai_cc --model gpt-4o-mini --setting temperature 0.7 --setting max_tokens 2000
 ```
+
+## 🌐 Agent API Endpoints
+
+The service provides comprehensive REST API endpoints for managing and interacting with AI agents:
+
+### Agent Management API
+
+#### List All Agents
+```bash
+GET /agents/
+```
+Returns all configured agents with their capabilities, tools, and resources.
+
+#### Get Agent Information
+```bash
+GET /agents/{agent_id}
+```
+Returns detailed information about a specific agent including available tools and model configuration.
+
+#### Chat with Agent
+```bash
+POST /agents/{agent_id}/chat
+```
+Send a message to an agent and get a response with conversation context and memory support.
+
+**Request Body:**
+```json
+{
+  "message": "What's the current time in Tokyo?",
+  "user_id": "user123",
+  "session_id": "session456",
+  "model": "gpt-4o-mini",
+  "model_settings": {
+    "temperature": 0.7,
+    "max_tokens": 2000
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "response": "The current time in Tokyo is...",
+  "agent_id": "research_agent",
+  "user_id": "user123",
+  "session_id": "session456",
+  "timestamp": "2024-01-16T15:30:45.123456",
+  "model_used": "gpt-4o-mini",
+  "tools_available": 6
+}
+```
+
+#### Conversation Management
+```bash
+GET /agents/{agent_id}/conversation/{session_id}?user_id=user123
+```
+Get complete conversation history for any session.
+
+```bash
+DELETE /agents/{agent_id}/conversation/{session_id}?user_id=user123
+```
+Clear conversation history for privacy and storage management.
+
+### OpenAI-Compatible API
+
+The service also provides OpenAI-compatible endpoints for seamless integration:
+
+#### Chat Completions
+```bash
+POST /v1/chat/completions
+```
+Standard OpenAI-compatible chat completions where the `model` parameter is interpreted as the `agent_id`.
+
+**Request:**
+```json
+{
+  "model": "research_agent",
+  "messages": [
+    {"role": "user", "content": "What's the current time in Tokyo?"}
+  ],
+  "temperature": 0.7
+}
+```
+
+#### List Models
+```bash
+GET /v1/models
+```
+Returns all configured agents as available "models" for OpenAI-compatible clients.
+
+### API Features
+
+- **Agent Discovery**: Automatic discovery of agents from `agent_config.json`
+- **Memory Integration**: Automatic conversation persistence and retrieval
+- **Model Override**: Override agent's default model and settings via API
+- **Session Management**: Maintain conversation history per user and session
+- **Tool Integration**: Full tool calling support with agent-specific permissions
+- **Multi-session Support**: Support for multiple concurrent sessions per user
+
+### Example API Usage
+
+```bash
+# List all available agents
+curl -X GET "http://localhost:8001/agents/"
+
+# Get specific agent information
+curl -X GET "http://localhost:8001/agents/research_agent"
+
+# Send a message to an agent
+curl -X POST "http://localhost:8001/agents/research_agent/chat" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is the current time in Tokyo?",
+    "user_id": "user123",
+    "session_id": "session456"
+  }'
+
+# Use OpenAI-compatible endpoint
+curl -X POST "http://localhost:8001/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "research_agent",
+    "messages": [
+      {"role": "user", "content": "What is the current time in Tokyo?"}
+    ]
+  }'
+```
+
 ### Agent Configuration
 
 Agents are configured in `agent_config.json`:
@@ -405,14 +557,16 @@ Agents are configured in `agent_config.json`:
   {
     "agent_id": "research_agent",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "fetch"],
+    "allowed_mcp_servers": ["deepwiki", "fetch", "searxng"],
     "allowed_mcp_tools": {
-      "deepwiki": ["read_wiki_structure", "search_wiki"],
-      "fetch": ["fetch_url"]
+      "deepwiki": ["search_wiki"],
+      "fetch": ["fetch_url"],
+      "searxng": ["searxng_web_search"]
     }
   }
 ]
 ```
+
 ### Troubleshooting
 
 **Agent not found:**
@@ -426,7 +580,8 @@ Agents are configured in `agent_config.json`:
 **Tools not working:**
 - Verify MCP servers are running (for MCP tools)
 - Check tool permissions in agent configuration
-
+- For command-based servers: Ensure Docker containers are running and accessible if a docker based command
+ 
 **Prompt issues:**
 - Verify prompt files exist in `prompts/` directory
 - Check file permissions and encoding (UTF-8)
@@ -448,6 +603,8 @@ Agents are configured in `agent_config.json`:
 - **Agent resource filtering** - Per-agent resource access control
 - **Prompt management** - System prompt loading and integration
 - **MCP integration** - End-to-end tool execution
+- **MCP server types** - HTTP-based and command-based server testing
+- **fastmcp integration** - StdioTransport testing, error handling, and mixed server environments
 - **Provider compatibility** - All providers tested
 - **Model configuration** - Agent config model settings and CLI parameter overrides
 - **Model settings flow** - Testing of settings passing from agent config to providers
@@ -479,6 +636,9 @@ pytest tests/test_integration/test_prompt_management_integration.py
 
 # Test MCP integration
 pytest tests/test_integration/test_basic_chat_agent_integration.py
+
+# Test fastmcp integration
+pytest tests/test_core/test_agents/test_agent_tool_manager.py
 ```
 
 ## 🛠️ Development
@@ -527,9 +687,10 @@ Example:
   "agent_id": "custom_agent",
   "system_prompt_file": "prompts/custom_agent.txt",
   "allowed_regular_tools": ["get_current_datetime", "add_two_numbers"],
-  "allowed_mcp_servers": ["deepwiki"],
+  "allowed_mcp_servers": ["deepwiki", "searxng"],
   "allowed_mcp_tools": {
-    "deepwiki": ["search_wiki"]
+    "deepwiki": ["search_wiki"],
+    "searxng": ["searxng_web_search"]
   }
 }
 ```
@@ -544,7 +705,7 @@ docker-compose --profile dev up
 
 Key dependencies include:
 - **FastAPI** - Modern web framework
-- **FastMCP** - Modern MCP Integration framework
+- **FastMCP** - Modern MCP Integration framework with StdioTransport support
 - **Uvicorn** - ASGI server with uvloop for performance
 - **Pydantic** - Data validation and settings management
 - **Pydantic-settings** - Environment-based configuration
@@ -571,4 +732,4 @@ For questions or issues:
 
 ---
 
-**Happy coding!** 🚀 
+**Happy coding!** 🚀
