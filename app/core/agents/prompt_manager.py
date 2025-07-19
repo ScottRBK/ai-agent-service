@@ -87,40 +87,64 @@ class PromptManager:
         return full_prompt
     
     def _get_tool_info(self, available_tools: list = None) -> str:
-        """Get tool information for the prompt."""
+        """Get tool information for the prompt including names and descriptions."""
         if not available_tools:
             return ""
         
-        # Extract tool names from dictionaries
-        if available_tools and isinstance(available_tools[0], dict):
-            tool_names = [tool["function"]["name"] for tool in available_tools]
-        else:
-            tool_names = available_tools
+        tool_descriptions = []
         
-        if tool_names:
-            return f"\n\nAvailable tools: {', '.join(tool_names)}"
+        # Handle both dictionary format (from get_available_tools) and string list format
+        if available_tools and isinstance(available_tools[0], dict):
+            for tool in available_tools:
+                if tool.get("type") == "function" and "function" in tool:
+                    tool_name = tool["function"]["name"]
+                    tool_description = tool["function"].get("description", "")
+                    
+                    # Format: "tool_name: description"
+                    if tool_description:
+                        tool_descriptions.append(f"{tool_name}: {tool_description}")
+                    else:
+                        tool_descriptions.append(tool_name)
+        else:
+            # Handle string list format
+            tool_descriptions = available_tools
+        
+        if tool_descriptions:
+            # Format as a bulleted list for better readability
+            formatted_tools = "\n".join([f"• {tool}" for tool in tool_descriptions])
+            return f"\n\nAvailable tools:\n{formatted_tools}"
         return ""
     
     def _get_resource_info(self) -> str:
-        """Get resource information for the prompt."""
+        """Get resource information for the prompt including names and descriptions."""
         resource_config = self.agent_resource_manager.config
         available_resources = resource_config.get("resources", [])
         
         if not available_resources:
             return ""
         
-        # Create human-readable resource descriptions
+        # Create detailed resource descriptions with names and explanations
         resource_descriptions = []
         for resource in available_resources:
             if resource == "memory":
-                resource_descriptions.append("conversation memory (can remember previous interactions) - so you can recall previous interactions and use them to help the user")
+                resource_descriptions.append("memory: conversation memory (can remember previous interactions) - so you can recall previous interactions and use them to help the user")
             elif resource == "knowledge_base":
-                resource_descriptions.append("knowledge base access")
+                resource_descriptions.append("knowledge_base: access to structured knowledge base for enhanced information retrieval")
             elif resource == "cache":
-                resource_descriptions.append("caching capabilities")
+                resource_descriptions.append("cache: caching capabilities for improved performance and reduced API calls")
+            elif resource == "file_system":
+                resource_descriptions.append("file_system: ability to read and write files for data persistence")
+            elif resource == "database":
+                resource_descriptions.append("database: direct database access for data storage and retrieval")
+            elif resource == "api_access":
+                resource_descriptions.append("api_access: ability to make external API calls for real-time data")
+            elif resource == "web_search":
+                resource_descriptions.append("web_search: internet search capabilities for current information")
             else:
-                resource_descriptions.append(resource)
+                resource_descriptions.append(f"{resource}: custom resource for specialized functionality")
         
         if resource_descriptions:
-            return f"\n\nAvailable resources: {', '.join(resource_descriptions)}"
+            # Format as a bulleted list for better readability
+            formatted_resources = "\n".join([f"• {resource}" for resource in resource_descriptions])
+            return f"\n\nAvailable resources:\n{formatted_resources}"
         return "" 

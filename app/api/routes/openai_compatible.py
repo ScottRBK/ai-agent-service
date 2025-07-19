@@ -64,7 +64,7 @@ async def chat_completions(request: ChatCompletionRequest):
     OpenAI-compatible chat completions endpoint.
     The 'model' parameter is interpreted as the agent_id.
     """
-    logger.info(f"Chat completions request: {request}")
+    logger.info(f"OpenAI-compatible - chat completions - request: {request}")
     try:
         # Input validation
         if not isinstance(request.messages, list) or len(request.messages) == 0:
@@ -76,6 +76,9 @@ async def chat_completions(request: ChatCompletionRequest):
             raise HTTPException(status_code=422, detail="'temperature' must be between 0 and 2")
         if request.max_tokens is not None and request.max_tokens < 0:
             raise HTTPException(status_code=422, detail="'max_tokens' must be non-negative")
+        
+        user_id = "default_user"
+        session_id = "default_session"
 
         # Extract agent_id from model parameter
         agent_id = request.model
@@ -84,12 +87,22 @@ async def chat_completions(request: ChatCompletionRequest):
         agent_configs = load_agent_configs()
         if not any(agent.get("agent_id") == agent_id for agent in agent_configs):
             raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        
+
+        try:
+            user_message = request.messages[-1]["content"]
+        except IndexError:
+            raise HTTPException(status_code=422, detail="'messages' must be a non-empty list")
+        
+        # If the user message starts with "### Task", use the summary agent
+        if user_message.startswith("### Task"):
+            agent_id = "summary_agent"
 
         # Create API agent
         agent = APIAgent(
             agent_id=agent_id,
-            user_id="default_user",  # Could be extracted from auth
-            session_id="default_session"
+            user_id=user_id,  # Could be extracted from auth
+            session_id=session_id
         )
 
         # Initialize the agent
@@ -97,12 +110,11 @@ async def chat_completions(request: ChatCompletionRequest):
 
         # Use the agent's chat method instead of calling provider directly
         # This ensures proper memory handling and conversation flow
-        try:
-            user_message = request.messages[-1]["content"]
-        except IndexError:
-            raise HTTPException(status_code=422, detail="'messages' must be a non-empty list")
-        response = await agent.chat(user_message)
 
+        
+
+        response = await agent.chat(user_message)
+        logger.info(f"OpenAI-compatible - chat completions - response: {response}")    
         # Format response in OpenAI format
         return ChatCompletionResponse(
             id="chatcmpl-123",

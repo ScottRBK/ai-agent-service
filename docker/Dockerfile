@@ -56,5 +56,5 @@ FROM production as development
 RUN pip install pytest pytest-asyncio httpx
 
 # Enable hot reload and development features
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 

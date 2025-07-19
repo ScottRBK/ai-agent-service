@@ -64,14 +64,24 @@
     "agent_id": "api_agent",
     "system_prompt_file": "api_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "searxng-simple"],
+    "allowed_mcp_servers": ["deepwiki", "searxng-simple", "fetch"],
     "allowed_mcp_tools": null,
     "provider": "ollama",
     "model": "qwen3:8b",
     "model_settings": {
-      "num_ctx": 30000,
-      "num_predict": 30000
+      "num_ctx": 40000,
+      "num_predict": 40000
     },
     "resources": ["memory"]
+  },
+  {
+    "agent_id": "summary_agent",
+    "system_prompt_file": "summary_agent.txt",
+    "allowed_regular_tools": [],
+    "allowed_mcp_servers": [],
+    "allowed_mcp_tools": [],
+    "provider": "azure_openai_cc",
+    "model": "gpt-4.1-nano"
   }
+ 
 ] 

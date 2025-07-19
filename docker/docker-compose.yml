@@ -41,6 +41,11 @@ services:
       SEARXNG_MCP_DEFAULT_FORMAT: "text"
       SEARXNG_MCP_LOG_LEVEL: "ERROR"
 
+      # Service Configuration
+      SERVICE_NAME: ${SERVICE_NAME:-ai-agent-service}
+      SERVICE_VERSION: ${SERVICE_VERSION:-0.1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
 
     volumes:
       # Mount configuration files and directories

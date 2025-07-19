@@ -115,7 +115,10 @@ class TestPromptManager:
             system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
             
             assert "You are a test assistant." in system_prompt
-            assert "Available tools: get_current_datetime, add_two_numbers" in system_prompt
+            # Updated to match new bulleted list format
+            assert "Available tools:" in system_prompt
+            assert "• get_current_datetime" in system_prompt
+            assert "• add_two_numbers" in system_prompt
     
     def test_get_system_prompt_with_tools_empty(self):
         """Test getting system prompt with no tools."""
@@ -311,7 +314,10 @@ class TestPromptManager:
             system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
             
             assert "You are a test assistant." in system_prompt
-            assert "Available tools: get_current_datetime, deepwiki__search_wiki" in system_prompt
+            # Updated to match new bulleted list format with descriptions
+            assert "Available tools:" in system_prompt
+            assert "• get_current_datetime: Get current date and time" in system_prompt
+            assert "• deepwiki__search_wiki: Search wiki content" in system_prompt
     
     def test_get_system_prompt_with_tools_mixed_formats(self):
         """Test that the method handles both formats correctly."""
@@ -343,7 +349,10 @@ class TestPromptManager:
             
             # Both should produce the same result
             assert system_prompt_names == system_prompt_dicts
-            assert "Available tools: get_current_datetime, add_two_numbers" in system_prompt_names
+            # Updated to match new bulleted list format
+            assert "Available tools:" in system_prompt_names
+            assert "• get_current_datetime" in system_prompt_names
+            assert "• add_two_numbers" in system_prompt_names
     
     def test_get_system_prompt_with_tools_empty_dict_list(self):
         """Test getting system prompt with empty list of tool dictionaries."""
@@ -383,11 +392,12 @@ class TestPromptManager:
             
             prompt_manager = PromptManager("test_agent")
             
-            # Test with malformed dictionary - should raise KeyError
+            # Test with malformed dictionary - should handle gracefully
             malformed_tools = [
                 {"type": "function", "name": "get_current_datetime"}  # Missing "function" key
             ]
             
-            # Should raise KeyError for malformed input
-            with pytest.raises(KeyError):
-                prompt_manager.get_system_prompt_with_tools(malformed_tools) 
+            # Should handle malformed input gracefully and return base prompt
+            system_prompt = prompt_manager.get_system_prompt_with_tools(malformed_tools)
+            assert system_prompt == "You are a test assistant."
+            assert "Available tools:" not in system_prompt 
