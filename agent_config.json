@@ -3,10 +3,13 @@
     "agent_id": "research_agent",
     "system_prompt_file": "research_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "fetch"],
-    "allowed_mcp_tools": {
-      "deepwiki": ["read_wiki_structure", "search_wiki"],
-      "fetch": ["fetch_url"]
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": ["read_wiki_structure", "search_wiki"]
+      },
+      "fetch": {
+        "allowed_mcp_tools": ["fetch_url"]
+      }
     },
     "provider": "azure_openai_cc"
   },
@@ -14,9 +17,10 @@
     "agent_id": "restricted_agent",
     "system_prompt_file": "restricted_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki"],
-    "allowed_mcp_tools": {
-      "deepwiki": ["read_wiki_structure"]
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": ["read_wiki_structure"]
+      }
     },
     "provider": "azure_openai_cc"
   },
@@ -24,24 +28,38 @@
     "agent_id": "mcp_agent",
     "system_prompt_file": "mcp_agent.txt",
     "allowed_regular_tools": [],
-    "allowed_mcp_servers": ["deepwiki", "fetch"],
-    "allowed_mcp_tools": null,
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": null
+      },
+      "fetch": {
+        "allowed_mcp_tools": null
+      }
+    },
     "provider": "azure_openai_cc"
   },
   {
     "agent_id": "regular_tools_only_agent",
     "system_prompt_file": "regular_tools_only_agent.txt",
     "allowed_regular_tools": ["get_current_datetime", "add_two_numbers"],
-    "allowed_mcp_servers": [],
-    "allowed_mcp_tools": {},
+    "allowed_mcp_servers": {},
     "provider": "azure_openai_cc"
   },
   {
     "agent_id": "cli_agent",
     "system_prompt_file": "cli_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "searxng", "github"],
-    "allowed_mcp_tools": null,
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": null
+      },
+      "searxng": {
+        "allowed_mcp_tools": null
+      },
+      "github": {
+        "allowed_mcp_tools": null
+      }
+    },
     "provider": "ollama",
     "model": "qwen3:4b",
     "model_settings": {
@@ -54,8 +72,11 @@
     "agent_id": "azure_agent",
     "system_prompt_file": "cli_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["searxng-simple"],
-    "allowed_mcp_tools": null,
+    "allowed_mcp_servers": {
+      "searxng-simple": {
+        "allowed_mcp_tools": null
+      }
+    },
     "provider": "azure_openai",
     "model": "gpt-4o-mini",
     "resources": ["memory"]
@@ -64,8 +85,20 @@
     "agent_id": "api_agent",
     "system_prompt_file": "api_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "searxng-npx", "fetch"],
-    "allowed_mcp_tools": null,
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": null
+      },
+      "searxng-npx": {
+        "allowed_mcp_tools": null
+      },
+      "fetch": {
+        "allowed_mcp_tools": null
+      },
+      "github": {
+        "allowed_mcp_tools": ["get_me", "search_repositories", "search_code"]
+      }
+    },
     "provider": "ollama",
     "model": "qwen3:8b",
     "model_settings": {
@@ -78,8 +111,7 @@
     "agent_id": "summary_agent",
     "system_prompt_file": "summary_agent.txt",
     "allowed_regular_tools": [],
-    "allowed_mcp_servers": [],
-    "allowed_mcp_tools": [],
+    "allowed_mcp_servers": {},
     "provider": "azure_openai_cc",
     "model": "gpt-4.1-nano"
   },
@@ -87,8 +119,7 @@
     "agent_id": "memory_compression_agent",
     "system_prompt_file": "memory_compression_agent.txt",
     "allowed_regular_tools": [],
-    "allowed_mcp_servers": [],
-    "allowed_mcp_tools": [],
+    "allowed_mcp_servers": {},
     "provider": "azure_openai_cc",
     "model": "gpt-4.1-nano"
   },
@@ -96,10 +127,30 @@
     "agent_id": "developer_agent",
     "system_prompt_file": "developer_agent.txt",
     "allowed_regular_tools": [],
-    "allowed_mcp_servers": ["github"],
-    "allowed_mcp_tools": null,
+    "allowed_mcp_servers": {
+      "github": {
+        "allowed_mcp_tools": null
+      }
+    },
     "provider": "azure_openai_cc",
     "model": "gpt-4.1-nano"
+  },
+  {
+    "agent_id": "gpt_api_agent",
+    "system_prompt_file": "api_agent.txt",
+    "allowed_regular_tools": ["get_current_datetime"],
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": null
+      },
+      "searxng-npx": {
+        "allowed_mcp_tools": null
+      },
+      "fetch": {
+        "allowed_mcp_tools": null
+      }
+    },
+    "provider": "azure_openai_cc",
+    "model": "gpt-4.1"
   }
- 
 ] 

@@ -334,11 +334,16 @@ Configure agent-specific tool access, resources, and model settings via `agent_c
     "agent_id": "research_agent",
     "system_prompt_file": "prompts/research_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "fetch", "searxng"],
-    "allowed_mcp_tools": {
-      "deepwiki": ["read_wiki_structure", "search_wiki"],
-      "fetch": ["fetch_url"],
-      "searxng": ["searxng_web_search"]
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": ["read_wiki_structure", "search_wiki"]
+      },
+      "fetch": {
+        "allowed_mcp_tools": ["fetch_url"]
+      },
+      "searxng": {
+        "allowed_mcp_tools": null  # all tools from searxng
+      }
     },
     "resources": ["memory"],
     "provider": "azure_openai_cc",
@@ -352,6 +357,13 @@ Configure agent-specific tool access, resources, and model settings via `agent_c
   }
 ]
 ```
+
+**MCP Server Configuration:**
+- **Server-level access**: Each server in `allowed_mcp_servers` defines which MCP servers the agent can access
+- **Tool-level filtering**: Each server can specify `allowed_mcp_tools` to control which tools are available:
+  - `null`: All tools from this server are available
+  - `[]`: No tools from this server are available
+  - `["tool1", "tool2"]`: Only specified tools from this server are available
 **Resource Configuration:**
 - `resources` - Array of resource types available to the agent
 - Automatic resource creation when agents request access
@@ -655,14 +667,55 @@ Agents are configured in `agent_config.json`:
   {
     "agent_id": "research_agent",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "fetch", "searxng"],
-    "allowed_mcp_tools": {
-      "deepwiki": ["search_wiki"],
-      "fetch": ["fetch_url"],
-      "searxng": ["searxng_web_search"]
+    "allowed_mcp_servers": {
+      "deepwiki": {
+        "allowed_mcp_tools": ["search_wiki"]
+      },
+      "fetch": {
+        "allowed_mcp_tools": ["fetch_url"]
+      },
+      "searxng": {
+        "allowed_mcp_tools": null  # all tools from searxng
+      }
     }
   }
 ]
+```
+
+**Configuration Examples:**
+
+**Full access to all tools from a server:**
+```json
+{
+  "deepwiki": {
+    "allowed_mcp_tools": null  # All tools from deepwiki
+  }
+}
+```
+
+**Limited access to specific tools:**
+```json
+{
+  "github": {
+    "allowed_mcp_tools": ["search_code", "get_repository"]  # Only these tools
+  }
+}
+```
+
+**No access to tools from a server:**
+```json
+{
+  "searxng": {
+    "allowed_mcp_tools": []  # No tools from searxng
+  }
+}
+```
+
+**All MCP servers with all tools (legacy behavior):**
+```json
+{
+  "allowed_mcp_servers": null  # All servers with all tools
+}
 ```
 
 ### Troubleshooting
@@ -800,10 +853,13 @@ Example:
   "agent_id": "custom_agent",
   "system_prompt_file": "prompts/custom_agent.txt",
   "allowed_regular_tools": ["get_current_datetime", "add_two_numbers"],
-  "allowed_mcp_servers": ["deepwiki", "searxng"],
-  "allowed_mcp_tools": {
-    "deepwiki": ["search_wiki"],
-    "searxng": ["searxng_web_search"]
+  "allowed_mcp_servers": {
+    "deepwiki": {
+      "allowed_mcp_tools": ["search_wiki"]
+    },
+    "searxng": {
+      "allowed_mcp_tools": null  # all tools from searxng
+    }
   }
 }
 ```

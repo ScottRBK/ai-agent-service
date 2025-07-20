@@ -50,7 +50,7 @@ def mock_mcp_servers_data():
             "server_url": "https://example_mcp_server/mcp",
             "require_approval": "never",
             "header": {
-                "Authorization": ""
+                "authorization": ""
             }
         },
         {
@@ -59,7 +59,7 @@ def mock_mcp_servers_data():
             "server_url": "https://another_mcp_server/mcp",
             "require_approval": "always",
             "header": {
-                "Authorization": "Bearer token123"
+                "authorization": "Bearer token123"
             }
         }
     ]

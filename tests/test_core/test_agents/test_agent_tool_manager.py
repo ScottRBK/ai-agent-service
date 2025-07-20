@@ -32,7 +32,6 @@ class TestAgentToolManager:
         assert agent_manager.config["agent_id"] == "nonexistent_agent"
         assert agent_manager.config["allowed_regular_tools"] is None  # All tools allowed
         assert agent_manager.config["allowed_mcp_servers"] is None    # All servers allowed
-        assert agent_manager.config["allowed_mcp_tools"] == {}        # All tools from allowed servers
     
     @pytest.mark.asyncio
     async def test_get_regular_tools_with_allowed_tools(self):
@@ -98,9 +97,10 @@ class TestAgentToolManager:
         
         # Mock the config
         agent_manager.config = {
-            "allowed_mcp_servers": ["deepwiki"],
-            "allowed_mcp_tools": {
-                "deepwiki": ["read_wiki_structure"]
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": ["read_wiki_structure"]
+                }
             }
         }
         
@@ -138,8 +138,7 @@ class TestAgentToolManager:
         
         # Mock the config to allow all servers
         agent_manager.config = {
-            "allowed_mcp_servers": None,
-            "allowed_mcp_tools": None
+            "allowed_mcp_servers": None
         }
         
         # Mock the MCP servers
@@ -170,6 +169,21 @@ class TestAgentToolManager:
                 assert "deepwiki__read_wiki_structure" in tools[0]["function"]["name"]
     
     @pytest.mark.asyncio
+    async def test_get_mcp_tools_with_empty_servers(self):
+        """Test getting MCP tools when agent has empty allowed servers."""
+        agent_manager = AgentToolManager("research_agent")
+        
+        # Mock the config to allow no servers
+        agent_manager.config = {
+            "allowed_mcp_servers": {}
+        }
+        
+        tools = await agent_manager.get_mcp_tools()
+        
+        # Should return empty list
+        assert tools == []
+    
+    @pytest.mark.asyncio
     async def test_get_available_tools_combines_regular_and_mcp(self):
         """Test that get_available_tools combines regular and MCP tools."""
         agent_manager = AgentToolManager("research_agent")
@@ -177,9 +191,10 @@ class TestAgentToolManager:
         # Mock the config
         agent_manager.config = {
             "allowed_regular_tools": ["get_current_datetime"],
-            "allowed_mcp_servers": ["deepwiki"],
-            "allowed_mcp_tools": {
-                "deepwiki": ["read_wiki_structure"]
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": ["read_wiki_structure"]
+                }
             }
         }
         
@@ -242,9 +257,10 @@ class TestAgentToolManager:
         """Test executing an MCP tool successfully."""
         agent_manager = AgentToolManager("research_agent")
         agent_manager.config = {
-            "allowed_mcp_servers": ["deepwiki"],
-            "allowed_mcp_tools": {
-                "deepwiki": ["read_wiki_structure"]
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": ["read_wiki_structure"]
+                }
             }
         }
         
@@ -275,9 +291,10 @@ class TestAgentToolManager:
         """Test executing an MCP tool from unauthorized server."""
         agent_manager = AgentToolManager("research_agent")
         agent_manager.config = {
-            "allowed_mcp_servers": ["deepwiki"],
-            "allowed_mcp_tools": {
-                "deepwiki": ["read_wiki_structure"]
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": ["read_wiki_structure"]
+                }
             }
         }
         
@@ -289,9 +306,10 @@ class TestAgentToolManager:
         """Test executing an MCP tool that agent doesn't have access to."""
         agent_manager = AgentToolManager("research_agent")
         agent_manager.config = {
-            "allowed_mcp_servers": ["deepwiki"],
-            "allowed_mcp_tools": {
-                "deepwiki": ["read_wiki_structure"]
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": ["read_wiki_structure"]
+                }
             }
         }
         
@@ -316,9 +334,10 @@ class TestAgentToolManager:
         """Test execute_tool with an MCP tool."""
         agent_manager = AgentToolManager("research_agent")
         agent_manager.config = {
-            "allowed_mcp_servers": ["deepwiki"],
-            "allowed_mcp_tools": {
-                "deepwiki": ["read_wiki_structure"]
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": ["read_wiki_structure"]
+                }
             }
         }
         
@@ -422,9 +441,10 @@ class TestAgentToolManager:
         """Test executing a tool from a command-based MCP server."""
         agent_manager = AgentToolManager("research_agent")
         agent_manager.config = {
-            "allowed_mcp_servers": ["searxng"],
-            "allowed_mcp_tools": {
-                "searxng": ["searxng_web_search"]
+            "allowed_mcp_servers": {
+                "searxng": {
+                    "allowed_mcp_tools": ["searxng_web_search"]
+                }
             }
         }
         
@@ -514,9 +534,10 @@ class TestAgentToolManager:
         """Test error handling when command-based MCP server communication fails."""
         agent_manager = AgentToolManager("research_agent")
         agent_manager.config = {
-            "allowed_mcp_servers": ["searxng"],
-            "allowed_mcp_tools": {
-                "searxng": ["searxng_web_search"]
+            "allowed_mcp_servers": {
+                "searxng": {
+                    "allowed_mcp_tools": ["searxng_web_search"]
+                }
             }
         }
         
@@ -576,12 +597,100 @@ class TestAgentToolManager:
             server_label="deepwiki",
             server_url="https://mcp.deepwiki.com/mcp",
             require_approval="never",
-            header={"Authorization": ""}
+            header={"authorization": ""}
         )
         
         assert valid_http_server.server_label == "deepwiki"
         assert valid_http_server.server_url == "https://mcp.deepwiki.com/mcp"
         assert valid_http_server.command is None
         assert valid_http_server.args is None
+
+    @pytest.mark.asyncio
+    async def test_get_mcp_tools_with_null_tools_per_server(self):
+        """Test getting MCP tools when server has null allowed_mcp_tools (all tools allowed)."""
+        agent_manager = AgentToolManager("research_agent")
+        
+        # Mock the config with null allowed_mcp_tools
+        agent_manager.config = {
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": None
+                }
+            }
+        }
+        
+        # Mock the MCP servers
+        mock_server = MagicMock()
+        mock_server.server_label = "deepwiki"
+        mock_server.server_url = "http://localhost:8080"
+        
+        with patch('app.core.agents.agent_tool_manager.ToolRegistry.load_mcp_servers') as mock_load:
+            mock_load.return_value = [mock_server]
+            
+            # Mock the MCP client
+            mock_client = AsyncMock()
+            mock_tool1 = MagicMock()
+            mock_tool1.name = "read_wiki_structure"
+            mock_tool1.description = "Read wiki structure"
+            mock_tool1.inputSchema = {"type": "object", "properties": {}}
+            
+            mock_tool2 = MagicMock()
+            mock_tool2.name = "search_wiki"
+            mock_tool2.description = "Search wiki"
+            mock_tool2.inputSchema = {"type": "object", "properties": {}}
+            
+            with patch('app.core.agents.agent_tool_manager.Client') as mock_client_class:
+                mock_client_class.return_value = mock_client
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.list_tools.return_value = [mock_tool1, mock_tool2]
+                
+                tools = await agent_manager.get_mcp_tools()
+                
+                # Should return all tools from the server
+                assert len(tools) == 2
+                tool_names = [tool["function"]["name"] for tool in tools]
+                assert "deepwiki__read_wiki_structure" in tool_names
+                assert "deepwiki__search_wiki" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_get_mcp_tools_with_empty_tools_per_server(self):
+        """Test getting MCP tools when server has empty allowed_mcp_tools (no tools allowed)."""
+        agent_manager = AgentToolManager("research_agent")
+        
+        # Mock the config with empty allowed_mcp_tools
+        agent_manager.config = {
+            "allowed_mcp_servers": {
+                "deepwiki": {
+                    "allowed_mcp_tools": []
+                }
+            }
+        }
+        
+        # Mock the MCP servers
+        mock_server = MagicMock()
+        mock_server.server_label = "deepwiki"
+        mock_server.server_url = "http://localhost:8080"
+        
+        with patch('app.core.agents.agent_tool_manager.ToolRegistry.load_mcp_servers') as mock_load:
+            mock_load.return_value = [mock_server]
+            
+            # Mock the MCP client
+            mock_client = AsyncMock()
+            mock_tool = MagicMock()
+            mock_tool.name = "read_wiki_structure"
+            mock_tool.description = "Read wiki structure"
+            mock_tool.inputSchema = {"type": "object", "properties": {}}
+            
+            with patch('app.core.agents.agent_tool_manager.Client') as mock_client_class:
+                mock_client_class.return_value = mock_client
+                mock_client.__aenter__.return_value = mock_client
+                mock_client.__aexit__.return_value = None
+                mock_client.list_tools.return_value = [mock_tool]
+                
+                tools = await agent_manager.get_mcp_tools()
+                
+                # Should return no tools since empty list means no tools allowed
+                assert len(tools) == 0
 
    

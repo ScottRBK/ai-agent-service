@@ -6,10 +6,13 @@ Example agent_config.json:
 {
   "agent_id": "research_agent",
   "allowed_regular_tools": ["get_current_datetime"],
-  "allowed_mcp_servers": ["deepwiki", "fetch"],
-  "allowed_mcp_tools": {
-    "deepwiki": ["search", "get_article"],
-    "fetch": ["fetch_url"]
+  "allowed_mcp_servers": {
+    "deepwiki": {
+      "allowed_mcp_tools": null  # all tools for this mcp
+    },
+    "github": {
+      "allowed_mcp_tools": ["search_code"]  # only this tool for this mcp
+    }
   },
   "provider": "azure_openai_cc"
 }
@@ -17,7 +20,7 @@ Example agent_config.json:
 
 import json
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from app.core.tools.tool_registry import ToolRegistry
 from app.utils.logging import logger
 from fastmcp import Client
@@ -46,10 +49,13 @@ class AgentToolManager:
         {
           "agent_id": "research_agent",
           "allowed_regular_tools": ["get_current_datetime"],
-          "allowed_mcp_servers": ["deepwiki", "fetch"],
-          "allowed_mcp_tools": {
-            "deepwiki": ["search", "get_article"],
-            "fetch": ["fetch_url"]
+          "allowed_mcp_servers": {
+            "deepwiki": {
+              "allowed_mcp_tools": null  # all tools for this mcp
+            },
+            "github": {
+              "allowed_mcp_tools": ["search_code"]  # only this tool for this mcp
+            }
           }
         }
         """
@@ -80,8 +86,7 @@ class AgentToolManager:
         return {
             "agent_id": self.agent_id,
             "allowed_regular_tools": None,  # None means all tools
-            "allowed_mcp_servers": None,    # None means all servers (deepwiki, fetch)
-            "allowed_mcp_tools": {}         # Empty means all tools from allowed servers
+            "allowed_mcp_servers": None,    # None means all servers with all tools
         }
     
     async def get_available_tools(self) -> List[Dict[str, Any]]:
@@ -145,46 +150,48 @@ class AgentToolManager:
         mcp_servers = ToolRegistry.load_mcp_servers()
         all_mcp_tools = []
         
-        # Determine which servers this agent can access
-        allowed_servers = self.config.get("allowed_mcp_servers")
-        if allowed_servers is None:
-            # Agent has access to all servers (deepwiki, fetch, etc.)
+        # Get the allowed MCP servers configuration
+        allowed_mcp_servers_config = self.config.get("allowed_mcp_servers")
+        
+        if allowed_mcp_servers_config is None:
+            # Agent has access to all servers with all tools
             accessible_servers = mcp_servers
-        elif allowed_servers == []:
+            server_configs = {server.server_label: {"allowed_mcp_tools": None} for server in mcp_servers}
+        elif allowed_mcp_servers_config == {}:
             # Agent has no access to MCP servers
             accessible_servers = []
+            server_configs = {}
         else:
-            # Filter to allowed servers
-            accessible_servers = [
-                server for server in mcp_servers 
-                if server.server_label in allowed_servers
-            ]
+            # Filter to allowed servers and get their configurations
+            accessible_servers = []
+            server_configs = {}
+            
+            for server in mcp_servers:
+                if server.server_label in allowed_mcp_servers_config:
+                    accessible_servers.append(server)
+                    server_configs[server.server_label] = allowed_mcp_servers_config[server.server_label]
         
         # Load tools from accessible servers
         for mcp_server in accessible_servers:
             server_tools = await self.load_server_tools(mcp_server)
             
-            # Filter tools if specific tools are restricted
-            allowed_mcp_tools = self.config.get("allowed_mcp_tools")
-            if allowed_mcp_tools is None:
+            # Get server-specific configuration
+            server_config = server_configs.get(mcp_server.server_label, {})
+            allowed_tools_for_server = server_config.get("allowed_mcp_tools")
+            
+            if allowed_tools_for_server is None:
                 # Allow all tools from this server (null = all tools)
                 all_mcp_tools.extend(server_tools)
-            elif allowed_mcp_tools == {}:
-                # Allow all tools from this server (empty dict = all tools)
-                all_mcp_tools.extend(server_tools)
+            elif allowed_tools_for_server == []:
+                # No tools allowed from this server
+                continue
             else:
                 # Filter to specific tools
-                allowed_tools_for_server = allowed_mcp_tools.get(mcp_server.server_label, [])
-                if allowed_tools_for_server:
-                    # Filter to specific tools
-                    filtered_server_tools = [
-                        tool for tool in server_tools
-                        if tool["function"]["name"].split("__")[1] in allowed_tools_for_server
-                    ]
-                    all_mcp_tools.extend(filtered_server_tools)
-                else:
-                    # No specific tools allowed from this server
-                    continue
+                filtered_server_tools = [
+                    tool for tool in server_tools
+                    if tool["function"]["name"].split("__")[1] in allowed_tools_for_server
+                ]
+                all_mcp_tools.extend(filtered_server_tools)
         
         self.mcp_tools_cache = all_mcp_tools
         logger.debug(f"Agent {self.agent_id} has access to {len(all_mcp_tools)} MCP tools from {len(accessible_servers)} servers")
@@ -272,19 +279,18 @@ class AgentToolManager:
         mcp_server_label, actual_tool_name = tool_name.split(separator, 1)
         
         # Check if agent has access to this server
-        allowed_servers = self.config.get("allowed_mcp_servers") if self.config else None
-        if allowed_servers is not None and mcp_server_label not in allowed_servers:
+        allowed_mcp_servers_config = self.config.get("allowed_mcp_servers")
+        if allowed_mcp_servers_config is not None and mcp_server_label not in allowed_mcp_servers_config:
             raise ValueError(f"Agent {self.agent_id} does not have access to MCP server {mcp_server_label}")
         
         # Check if agent has access to this specific tool
-        allowed_tools_for_server = []
-        if self.config:
-            allowed_mcp_tools = self.config.get("allowed_mcp_tools", {})
-            if allowed_mcp_tools is not None:
-                allowed_tools_for_server = allowed_mcp_tools.get(mcp_server_label, [])
+        allowed_tools_for_server = None
+        if allowed_mcp_servers_config and mcp_server_label in allowed_mcp_servers_config:
+            server_config = allowed_mcp_servers_config[mcp_server_label]
+            allowed_tools_for_server = server_config.get("allowed_mcp_tools")
         
         # If specific tools are allowed for this server, check if this tool is in the list
-        if allowed_tools_for_server and actual_tool_name not in allowed_tools_for_server:
+        if allowed_tools_for_server is not None and actual_tool_name not in allowed_tools_for_server:
             raise ValueError(f"Agent {self.agent_id} does not have access to tool {actual_tool_name} from server {mcp_server_label}")
         
         # Execute the MCP tool
