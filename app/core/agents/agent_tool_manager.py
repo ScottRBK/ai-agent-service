@@ -196,8 +196,11 @@ class AgentToolManager:
         """
         try:
             if mcp_server.server_url:
-                # HTTP-based MCP server (existing code)
-                mcp_client = Client(mcp_server.server_url)
+                # HTTP-based MCP server
+                if mcp_server.header.authorization:
+                    mcp_client = Client(mcp_server.server_url, auth=mcp_server.header.authorization)
+                else:
+                    mcp_client = Client(mcp_server.server_url)
             elif mcp_server.command:
                 # Command-based MCP server using fastmcp StdioTransport
                 from fastmcp.client.transports import StdioTransport
@@ -295,8 +298,11 @@ class AgentToolManager:
         server = servers_by_label[mcp_server_label]
         
         if server.server_url:
-            # HTTP-based server (existing code)
-            client = Client(server.server_url)
+            # HTTP-based server
+            if server.header.authorization:
+                client = Client(server.server_url, auth=server.header.authorization)
+            else:
+                client = Client(server.server_url)
         elif server.command:
             # Command-based server using fastmcp StdioTransport
             from fastmcp.client.transports import StdioTransport

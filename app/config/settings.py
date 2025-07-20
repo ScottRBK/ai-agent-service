@@ -41,10 +41,15 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "your_password_here"
     POSTGRES_DB: str = "postgres"
 
+    # Note: MCP server tokens are handled dynamically via environment variable substitution
+    # in ToolRegistry.load_mcp_servers(). No need to declare them here.
+    # Example: ${GITHUB_TOKEN}, ${NEW_SERVICE_TOKEN}, etc. will be resolved automatically.
+
     """Pydantic configuration."""   
     model_config = ConfigDict(
         env_file = ".env",
-        case_sensitive = True
+        case_sensitive = True,
+        extra = "ignore"  # Allow extra environment variables for MCP server tokens
     )
 
 settings = Settings()

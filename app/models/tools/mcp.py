@@ -3,7 +3,7 @@ from typing import Optional, List, Dict
 
 class MCPHeader(BaseModel):
     """Response MCP header model"""
-    Authorization: str = Field(description="The authorization token for the MCP server")
+    authorization: str = Field(description="The authorization token for the MCP server")
 
 class MCP(BaseModel):
     """Response MCP model"""

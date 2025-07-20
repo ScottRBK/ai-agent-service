@@ -4,14 +4,16 @@ It is used to convert the tool registry to the different formats that are suppor
 It is also used to execute the tool calls.
 """
 
+import os
+import re
 import json
-from app.models.tools.tools import Tool, ToolParameters
-from app.models.tools.mcp import MCP
-from app.utils.logging import logger
 from typing import Callable, Dict, Any, Type
 from pydantic import BaseModel
 from pydantic import ValidationError
 from mcp.types import Tool as MCPTool
+from app.models.tools.tools import Tool, ToolParameters
+from app.models.tools.mcp import MCP
+from app.utils.logging import logger
 
 TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
@@ -50,15 +52,35 @@ class ToolRegistry:
     """
 
     @staticmethod
+    def _substitute_environment_variables(obj):
+        """Recursively substitute environment variables in strings using ${VAR_NAME} syntax."""
+        if isinstance(obj, dict):
+            return {key: ToolRegistry._substitute_environment_variables(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [ToolRegistry._substitute_environment_variables(item) for item in obj]
+        elif isinstance(obj, str):
+            def replace_var(match):
+                var_name = match.group(1)
+                env_value = os.getenv(var_name)
+                if env_value is None:
+                    logger.warning(f"Environment variable {var_name} not found, using empty string")
+                    return ""
+                return env_value
+            return re.sub(r'\$\{([^}]+)\}', replace_var, obj)
+        else:
+            return obj
+
+    @staticmethod
     def load_mcp_servers() -> list[MCP]:
-        """
-        Loads the MCP servers from the mcp.json file.
-        """
+        """Loads the MCP servers from the mcp.json file with environment variable substitution."""
         try:
             from app.config.settings import settings
             config_path = settings.MCP_CONFIG_PATH
             with open(config_path, "r") as f:
                 mcp_data = json.load(f)
+            
+            # Substitute environment variables in the loaded data
+            mcp_data = ToolRegistry._substitute_environment_variables(mcp_data)
             
             if isinstance(mcp_data, dict):
                 mcp_servers = [mcp_data]

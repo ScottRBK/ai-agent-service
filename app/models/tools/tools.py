@@ -9,7 +9,7 @@ class ToolParameters(BaseModel):
     """Base class for all tool parameters."""
     type: str = "object"
     properties: Dict[str, Any]
-    required: List[str]
+    required: List[str] = []
 
 class Tool(BaseModel):
     """Base class for all tools."""

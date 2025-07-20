@@ -134,6 +134,57 @@ The application uses environment-based configuration with sensible defaults:
 | `AGENT_CONFIG_PATH` | "agent_config.json" | Path to agent configuration file |
 | `MCP_CONFIG_PATH` | "mcp.json" | Path to MCP server configuration file |
 | `PROMPTS_DIR_PATH` | "prompts" | Path to prompts directory |
+| `GITHUB_TOKEN` | (dynamic) | GitHub token for MCP server authentication (resolved via environment variable substitution) |
+
+### MCP Server Authorization
+
+The service supports secure authorization for MCP servers through centralized environment variable substitution:
+
+#### Environment Variable Substitution
+MCP server configurations can reference environment variables using `${VARIABLE_NAME}` syntax. The substitution is handled automatically when MCP servers are loaded:
+
+```json
+{
+  "server_label": "github",
+  "server_url": "https://api.githubcopilot.com/mcp/",
+  "require_approval": "never",
+  "header": {
+    "authorization": "${GITHUB_TOKEN}"
+  }
+}
+```
+
+The `${GITHUB_TOKEN}` reference is automatically resolved to the value of the `GITHUB_TOKEN` environment variable when the MCP servers are loaded by the `ToolRegistry`.
+
+#### Security Best Practices
+1. **Set environment variables**: Configure token values as environment variables (no code changes required)
+2. **Reference in mcp.json**: Use `${VARIABLE_NAME}` syntax in MCP server configurations
+3. **Centralized processing**: Environment variable substitution is handled automatically during MCP server loading
+4. **Docker environment variables**: Pass tokens through Docker environment variables
+5. **Add to .gitignore**: Ensure `.env` files containing tokens are not committed to version control
+6. **No code changes**: Add new MCP servers with authorization by editing only `mcp.json` and setting environment variables
+7. **Pydantic configuration**: The `Settings` class is configured with `extra = "ignore"` to allow dynamic environment variables
+
+#### Adding New Authorization Tokens
+To add support for new MCP server tokens (no code changes required):
+
+1. **Reference in mcp.json**:
+```json
+{
+  "server_label": "new_service",
+  "server_url": "https://api.newservice.com/mcp/",
+  "header": {
+    "authorization": "${NEW_SERVICE_TOKEN}"
+  }
+}
+```
+
+2. **Set environment variable**:
+```bash
+export NEW_SERVICE_TOKEN="your_actual_token_here"
+```
+
+The environment variable substitution is handled automatically by the `ToolRegistry.load_mcp_servers()` method. No code changes or application restarts are required.
 
 ### Configuration File Management
 
@@ -244,7 +295,21 @@ POSTGRES_USER=ai_agent_user
 POSTGRES_PASSWORD=ai_agent_password
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
+
+# MCP Server Authorization
+GITHUB_TOKEN=your_github_token_here
 ```
+
+### Docker Compose Environment Variables
+```yaml
+environment:
+  # ... existing environment variables ...
+  GITHUB_TOKEN: ${GITHUB_TOKEN}
+  # Add other MCP server tokens as needed
+  NEW_SERVICE_TOKEN: ${NEW_SERVICE_TOKEN}
+```
+
+**Note**: Environment variable substitution for MCP server tokens is handled automatically by the `ToolRegistry` when loading the `mcp.json` configuration file.
 
 ### Database Setup
 The service includes PostgreSQL for memory persistence:
@@ -307,12 +372,15 @@ Configure agent-specific tool access, resources, and model settings via `agent_c
 ### MCP (Model Context Protocol) Integration
 The service supports both HTTP-based and command-based MCP servers using the fastmcp library:
 
-- **HTTP-based Servers**: DeepWiki, Fetch - Connect via URLs with standard HTTP/WebSocket
+- **HTTP-based Servers**: DeepWiki, Fetch, GitHub Copilot - Connect via URLs with standard HTTP/WebSocket
 - **Command-based Servers**: Searxng and other local/containerized servers - Use fastmcp StdioTransport for subprocess execution
 - **DeepWiki Server** - Interrogate information on Deepwiki page, https://docs.devin.ai/work-with-devin/deepwiki-mcp
 - **Fetch Server** - An MCP server that provides web content fetching capabilities. This server enables LLMs to retrieve and process content from web pages, converting HTML to markdown for easier consumption
+- **GitHub Copilot Server** - GitHub Copilot integration with secure token authentication via environment variables
 - **Searxng Server** - Web search capabilities via Docker container using fastmcp StdioTransport
 - **Extensible** - Add custom MCP servers via `mcp.json` with support for both server types
+- **Secure Authorization** - Dynamic environment variable substitution for token management using `${VARIABLE_NAME}` syntax (no code changes required)
+- **Automatic Processing** - Environment variables are resolved once during MCP server loading in `ToolRegistry`
 
 ### Tool Filtering
 - **Agent-specific permissions** - Control which tools each agent can access
@@ -611,7 +679,9 @@ Agents are configured in `agent_config.json`:
 - Verify MCP servers are running (for MCP tools)
 - Check tool permissions in agent configuration
 - For command-based servers: Ensure Docker containers are running and accessible if a docker based command
- 
+- **Authorization issues**: Verify environment variables are set for MCP server tokens (e.g., `GITHUB_TOKEN`)
+- **Token substitution**: Ensure environment variables referenced in `mcp.json` (e.g., `${GITHUB_TOKEN}`) are properly set
+
 **Prompt issues:**
 - Verify prompt files exist in `prompts/` directory
 - Check file permissions and encoding (UTF-8)
@@ -623,6 +693,14 @@ Agents are configured in `agent_config.json`:
 - Ensure CLI parameter format is correct: `--setting key value`
 - Model settings in agent config take precedence over provider defaults
 - CLI settings take precedence over agent config settings
+
+**Security and Authorization:**
+- Verify environment variable substitution syntax is correct (e.g., `${GITHUB_TOKEN}`)
+- Check that required environment variables are set in Docker containers
+- Ensure `.env` files containing tokens are added to `.gitignore`
+- **Environment variable substitution**: Check that `ToolRegistry.load_mcp_servers()` is properly processing environment variables
+- **Token resolution**: Verify that environment variables are being resolved during MCP server loading
+- **No code changes required**: MCP server tokens are handled dynamically via environment variable substitution
 
 ## 🧪 Testing
 

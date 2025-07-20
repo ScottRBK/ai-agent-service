@@ -1,20 +1,45 @@
 //example mcp.json file - rename to mcp.json
-//TODO: add the Authorization header from environment variable
 [
     {
         "server_label": "deepwiki",
         "server_url": "https://mcp.deepwiki.com/mcp",
         "require_approval": "never",
         "header": {
-            "Authorization": ""
+            "authorization": ""
         }
     },
     {
-        "server_label": "open-weather",
-        "server_url": "https://mcp.open-mcp.org/api/server/open-weather@latest/mcp",
+        "server_label": "searxng-simple-uvx",
+        "command": "uvx",
+        "args": [
+            "--with", "fastmcp==2.4.0", "searxng-simple-mcp"
+        ],
+        "env": {
+            "SEARXNG_MCP_SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL",
+            "SEARXNG_MCP_DEFAULT_LANGUAGE": "en",
+            "SEARXNG_MCP_DEFAULT_RESULT_COUNT": "10"
+
+        },
+        "require_approval": "never"
+    },
+    {
+        "server_label": "searxng-npx",
+        "command": "npx",
+        "args": [
+        "-y",
+        "mcp-searxng"
+        ],
+        "env": {
+        "SEARXNG_URL": "YOUR_SEARXNG_INSTANCE_URL"
+        },
+        "require_approval": "never"
+    },
+    {
+        "server_label": "github",
+        "server_url": "https://api.githubcopilot.com/mcp/",
         "require_approval": "never",
         "header": {
-            "Authorization": ""
+            "authorization": "${GITHUB_TOKEN}"
         }
     }
 ]

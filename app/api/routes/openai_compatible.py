@@ -105,6 +105,8 @@ async def chat_completions(request: ChatCompletionRequest):
             session_id=session_id
         )
 
+        
+
         # Initialize the agent
         await agent.initialize()
 

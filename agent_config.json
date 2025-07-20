@@ -40,12 +40,12 @@
     "agent_id": "cli_agent",
     "system_prompt_file": "cli_agent.txt",
     "allowed_regular_tools": ["get_current_datetime"],
-    "allowed_mcp_servers": ["deepwiki", "searxng"],
+    "allowed_mcp_servers": ["deepwiki", "searxng", "github"],
     "allowed_mcp_tools": null,
     "provider": "ollama",
     "model": "qwen3:4b",
     "model_settings": {
-      "num_ctx": 8000,
+      "num_ctx": 12000,
       "num_predict": 2000
     },
     "resources": ["memory"]
@@ -89,6 +89,15 @@
     "allowed_regular_tools": [],
     "allowed_mcp_servers": [],
     "allowed_mcp_tools": [],
+    "provider": "azure_openai_cc",
+    "model": "gpt-4.1-nano"
+  },
+  {
+    "agent_id": "developer_agent",
+    "system_prompt_file": "developer_agent.txt",
+    "allowed_regular_tools": [],
+    "allowed_mcp_servers": ["github"],
+    "allowed_mcp_tools": null,
     "provider": "azure_openai_cc",
     "model": "gpt-4.1-nano"
   }
