@@ -258,7 +258,7 @@ class AgentToolManager:
         if self.config.get("allowed_regular_tools") is not None:
             if tool_name not in self.config.get("allowed_regular_tools", []):
                 raise ValueError(f"Agent {self.agent_id} does not have access to tool {tool_name}")
-        
+        logger.info(f"Executing regular tool {tool_name} with arguments {arguments}")
         return ToolRegistry.execute_tool_call(tool_name, arguments)
     
     async def execute_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
@@ -318,8 +318,10 @@ class AgentToolManager:
         
         try:
             async with client:
+                logger.info(f"Executing MCP tool {actual_tool_name} with arguments {arguments}")
                 result = await client.call_tool(actual_tool_name, arguments)
                 await client.close()
+                logger.info(f"MCP tool {actual_tool_name} executed successfully")
                 return str(result)
         except Exception as e:
             # Return the error message as a string so the LLM can see it

@@ -22,6 +22,7 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 - **Hot Reload** - Development mode with automatic code reloading
 - **Resource Management** - Global resource lifecycle management with agent-specific filtering
 - **Memory Persistence** - PostgreSQL-based conversation history with automatic cleanup
+- **Memory Compression** - Intelligent conversation history management with AI-powered summarization
 - **Agent Resource Manager** - Per-agent resource access control and automatic resource creation
 
 ## 🚀 Quick Start
@@ -78,7 +79,8 @@ ai-agent-service/
 │   │   │   ├── agent_resource_manager.py # Agent resource management
 │   │   │   ├── prompt_manager.py        # System prompt management
 │   │   │   ├── cli_agent.py             # CLI agent implementation
-│   │   │   └── api_agent.py             # API agent implementation
+│   │   │   ├── api_agent.py             # API agent implementation
+│   │   │   └── memory_compression_agent.py # Memory compression agent
 │   │   ├── providers/
 │   │   │   ├── base.py                  # Base provider interface
 │   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API)
@@ -87,7 +89,8 @@ ai-agent-service/
 │   │   ├── resources/
 │   │   │   ├── base.py                  # Base resource interface
 │   │   │   ├── manager.py               # Global resource management
-│   │   │   └── memory.py                # PostgreSQL memory resource
+│   │   │   ├── memory.py                # PostgreSQL memory resource
+│   │   │   └── memory_compression_manager.py # Memory compression logic
 │   │   └── tools/
 │   │       ├── tool_registry.py         # Tool management
 │   │       └── function_calls/          # Built-in tools
@@ -274,10 +277,12 @@ Configure agent-specific tool access, resources, and model settings via `agent_c
     },
     "resources": ["memory"],
     "provider": "azure_openai_cc",
-    "model": "gpt-4o-mini",
+    "model": "qwen3:4b",
     "model_settings": {
       "temperature": 0.7,
-      "max_tokens": 2000
+      "max_tokens": 2000,
+      "num_ctx": 8192,
+      "num_predict": 2048
     }
   }
 ]
@@ -286,11 +291,18 @@ Configure agent-specific tool access, resources, and model settings via `agent_c
 - `resources` - Array of resource types available to the agent
 - Automatic resource creation when agents request access
 - Memory resources provide conversation persistence across sessions
+- Memory compression automatically manages long conversation histories
 
 **Model Configuration:**
 - `model` - AI model identifier (e.g., "gpt-4o-mini", "qwen3:4b")
 - `model_settings` - Provider-specific parameters (temperature, max_tokens, num_ctx, etc.)
 - Settings are passed directly to the provider without validation for maximum flexibility
+
+**Memory Compression Configuration:**
+- **threshold_tokens**: Token limit before compression is triggered (default: 8000)
+- **recent_messages_to_keep**: Number of recent messages to preserve (default: 4)
+- **enabled**: Enable/disable compression for specific agents (default: true)
+- **Agent-specific settings**: Different compression configurations per agent
 
 ### MCP (Model Context Protocol) Integration
 The service supports both HTTP-based and command-based MCP servers using the fastmcp library:
@@ -375,6 +387,10 @@ python examples/run_agent.py research_agent azure_openai_cc --model gpt-4o-mini 
 - **Session Isolation** - Separate memory per user and session
 - **Automatic Cleanup** - Expired memories automatically removed
 - **Content Filtering** - Internal tags and formatting automatically cleaned
+- **Memory Compression** - Intelligent conversation history management with AI-powered summarization
+- **Token-based Compression** - Automatically compresses conversations when token limits are exceeded
+- **Configurable Thresholds** - Set token limits and recent message retention per agent
+- **Session Summaries** - Creates concise summaries of older conversation parts
 
 ### Available Agents
 
@@ -401,6 +417,7 @@ $ python examples/run_agent.py research_agent azure_openai_cc
 
 🤖 research_agent Agent Ready!
 🛠️ Available tools: 6
+🧠 Memory: Enabled
 💬 Type 'quit' to exit
 
 You: What's the current time in Tokyo?
@@ -414,6 +431,19 @@ You: Search for the latest AI news
 You: quit
 👋 Goodbye!
 ```
+
+### Memory Compression Workflow
+
+The system automatically manages conversation history through intelligent compression:
+
+1. **Token Monitoring**: After each exchange, the system calculates total conversation tokens
+2. **Compression Trigger**: When token threshold is exceeded (configurable per agent)
+3. **Intelligent Splitting**: Older messages are separated from recent context
+4. **AI Summarization**: A specialized compression agent creates concise summaries
+5. **Context Preservation**: Recent messages are kept for immediate context
+6. **Summary Integration**: Future conversations include the summary as system context
+
+This ensures agents maintain conversation awareness while staying within token limits.
 
 Invoking a specific model and model parameters: 
 
@@ -597,9 +627,11 @@ Agents are configured in `agent_config.json`:
 ## 🧪 Testing
 
 ### Test Coverage
-- **103+ tests** including unit and integration tests
+- **129+ tests** including unit and integration tests
 - **Agent tool filtering** - Comprehensive permission testing
 - **Resource management** - Memory resource CRUD operations and lifecycle
+- **Memory compression management** - Comprehensive testing of compression logic, token counting, and conversation splitting
+- **Memory compression agent** - Testing of AI-powered summarization and compression workflows
 - **Agent resource filtering** - Per-agent resource access control
 - **Prompt management** - System prompt loading and integration
 - **MCP integration** - End-to-end tool execution
@@ -627,6 +659,9 @@ pytest tests/ --cov=app --cov-report=html
 ```bash
 # Test resource management
 pytest tests/test_core/test_resources/test_memory_resource.py
+
+# Test memory compression management
+pytest tests/test_core/test_resources/test_memory_compression_manager.py
 
 # Test agent tool filtering
 pytest tests/test_integration/test_agent_tool_filtering_integration.py

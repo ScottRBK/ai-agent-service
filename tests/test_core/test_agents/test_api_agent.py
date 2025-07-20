@@ -133,6 +133,8 @@ newlines\\tand tabs"""
             MagicMock(content={"role": "assistant", "content": "Hi there!"})
         ]
         mock_memory.get_memories.return_value = mock_memories
+        # Mock get_session_summary to return None (no summary)
+        mock_memory.get_session_summary.return_value = None
         agent.memory_resource = mock_memory
         
         history = await agent.get_conversation_history()
@@ -144,7 +146,10 @@ newlines\\tand tabs"""
         
         assert history == expected_history
         mock_memory.get_memories.assert_called_once_with(
-            "default_user", session_id="default_session", agent_id="test_agent"
+            "default_user", session_id="default_session", agent_id="test_agent", order_direction="asc"
+        )
+        mock_memory.get_session_summary.assert_called_once_with(
+            "default_user", "default_session", "test_agent"
         )
     
     @pytest.mark.asyncio

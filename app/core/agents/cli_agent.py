@@ -8,10 +8,10 @@ from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.providers.manager import ProviderManager
 from app.core.agents.prompt_manager import PromptManager
 from app.core.agents.agent_resource_manager import AgentResourceManager
+from app.core.agents.memory_compression_agent import MemoryCompressionAgent
 from app.utils.logging import logger
-from app.models.resources.memory import MemoryEntry
-from app.core.resources.memory import PostgreSQLMemoryResource
-
+from app.models.resources.memory import MemoryEntry, MemorySessionSummary
+from typing import List
 
 class CLIAgent:
     """
@@ -34,6 +34,7 @@ class CLIAgent:
         self.prompt_manager = PromptManager(agent_id)
         self.provider = None
         self.conversation_history = []
+        self.summary = None
         self.initialized = False
         
         # Store model configuration
@@ -68,14 +69,6 @@ class CLIAgent:
         logger.debug(f"Model: {self.model}, Model settings: {self.model_settings}")
 
         self.memory_resource = await self.resource_manager.get_memory_resource()
-
-        if self.memory_resource:
-            memories = await self.memory_resource.get_memories(self.user_id, session_id=self.session_id, agent_id=self.agent_id)
-            self.conversation_history = [{"role": memory.content["role"], "content": memory.content["content"]} for memory in memories]
-            for memory in self.conversation_history:
-                logger.debug(f"Memory: {memory}")
-        else:
-            logger.warning(f"No memory resource found for agent {self.agent_id}")
         
         self.initialized = True
 
@@ -105,19 +98,72 @@ class CLIAgent:
             await self.memory_resource.store_memory(memory_entry)
         else:
             logger.warning(f"No memory resource found for agent {self.agent_id}")
+
+    async def load_memory(self):
+        """Load memory from the memory resource."""
+        try:
+            memories: List[MemoryEntry] = await self.memory_resource.get_memories(self.user_id, self.session_id, self.agent_id, order_direction="asc")
+            summary: MemorySessionSummary = await self.memory_resource.get_session_summary(self.user_id, self.session_id, self.agent_id)
+            if summary:
+                conversation_history = [{"role": "system", "content": summary.summary}]
+            else:
+                conversation_history = []
+            conversation_history.extend([{"role": memory.content["role"], "content": memory.content["content"]} for memory in memories])
+            return conversation_history
+        
+        except Exception as e:
+            logger.error(f"client agent - load_memory - Error loading memory for agent {self.agent_id}: {e}")
+            return []
+
+    async def chat_with_memory(self, user_input: str) -> str:
+        """Send a message to the agent and get response."""
+        if not self.initialized:
+            await self.initialize()
+        
+        conversation_history = await self.load_memory()
+        # Add user message to history
+        await self.save_memory("user", user_input)     
+
+        # Get response from provider
+        response = await self.provider.send_chat(
+            context=[*conversation_history, {"role": "user", "content": user_input}],
+            model=self.model,
+            instructions=self.system_prompt,
+            agent_id=self.agent_id,
+            model_settings=self.model_settings
+        )
+        
+        # Add assistant response to history
+        clean_response = self._clean_response_for_memory(response)
+        await self.save_memory("assistant", clean_response)
+
+        compression_config = {
+                    "threshold_tokens": 500,
+                    "recent_messages_to_keep": 4,
+                    "enabled": True
+                    }
+        memory_compression_agent = MemoryCompressionAgent()
+        await memory_compression_agent.compress_conversation(self.agent_id, 
+                                                            compression_config,
+                                                            self.user_id,
+                                                            self.session_id)
+       
+        return response
     
     async def chat(self, user_input: str) -> str:
         """Send a message to the agent and get response."""
         if not self.initialized:
             await self.initialize()
-        
+
+        if self.memory_resource:
+            return await self.chat_with_memory(user_input)
+     
         # Add user message to history
-        self.conversation_history.append({"role": "user", "content": user_input})
-        await self.save_memory("user", user_input)
-        
+        self.conversation_history.append({"role": "user", "content": user_input})  
+
         # Get response from provider
         response = await self.provider.send_chat(
-            context=self.conversation_history,
+            context=[*self.conversation_history, {"role": "user", "content": user_input}],
             model=self.model,
             instructions=self.system_prompt,
             agent_id=self.agent_id,
@@ -126,7 +172,7 @@ class CLIAgent:
         
         # Add assistant response to history
         self.conversation_history.append({"role": "assistant", "content": response})
-        await self.save_memory("assistant", self._clean_response_for_memory(response))
+       
         return response
     
     async def interactive_mode(self):
@@ -153,7 +199,8 @@ class CLIAgent:
                 print("🤔 Thinking...")
                 response = await self.chat(user_input)
                 print(f"�� {self.agent_id}: {response}\n")
-                
+                  
+                        
             except KeyboardInterrupt:
                 print("\n👋 Goodbye!")
                 break

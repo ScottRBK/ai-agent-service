@@ -41,3 +41,33 @@ class MemoryEntry(BaseModel):
             raise ValueError("Content cannot be None")
         return v
 
+class MemorySessionSummary(BaseModel):
+    """Model for a memory session summary."""
+    
+    model_config = ConfigDict(
+        validate_assignment=True,
+        str_strip_whitespace=True
+    )
+    
+    id: Optional[str] = Field(None, description="Unique identifier for the memory session summary")
+    user_id: str = Field(..., description="User identifier")
+    session_id: str = Field(..., description="Session identifier")
+    agent_id: str = Field(..., description="Agent identifier")
+    summary: str = Field(..., description="Summary of the session")
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    @field_validator('user_id', 'session_id', 'agent_id')
+    @classmethod
+    def validate_ids(cls, v: str) -> str:
+        if not v or len(v.strip()) == 0:
+            raise ValueError("ID cannot be empty")
+        return v.strip()
+    
+    @field_validator('summary')
+    @classmethod
+    def validate_summary(cls, v: str) -> str:
+        if not v or len(v.strip()) == 0:
+            raise ValueError("Summary cannot be empty")
+        return v.strip()
+

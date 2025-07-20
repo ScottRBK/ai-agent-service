@@ -3,13 +3,14 @@ API Agent implementation for FastAPI integration.
 Based on CLIAgent but optimized for API usage.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.providers.manager import ProviderManager
 from app.core.agents.prompt_manager import PromptManager
 from app.core.agents.agent_resource_manager import AgentResourceManager
 from app.utils.logging import logger
-from app.models.resources.memory import MemoryEntry
+from app.models.resources.memory import MemoryEntry, MemorySessionSummary
+from app.core.agents.memory_compression_agent import MemoryCompressionAgent
 
 class APIAgent:
     """
@@ -85,13 +86,19 @@ class APIAgent:
         if not self.memory_resource:
             return []
             
-        memories = await self.memory_resource.get_memories(
+        memories: List[MemoryEntry] = await self.memory_resource.get_memories(
             self.user_id, 
             session_id=self.session_id, 
-            agent_id=self.agent_id
+            agent_id=self.agent_id, 
+            order_direction="asc"
         )
-        return [{"role": memory.content["role"], "content": memory.content["content"]} 
-                for memory in memories]
+        summary: MemorySessionSummary = await self.memory_resource.get_session_summary(self.user_id, self.session_id, self.agent_id)
+        if summary:
+            conversation_history = [{"role": "system", "content": summary.summary}]
+        else:
+            conversation_history = []
+        conversation_history.extend([{"role": memory.content["role"], "content": memory.content["content"]} for memory in memories])
+        return conversation_history
     
     def _clean_response_for_memory(self, response: str) -> str:
         """Clean response before storing in memory"""
@@ -134,6 +141,18 @@ class APIAgent:
         
         # Save assistant response
         await self.save_memory("assistant", self._clean_response_for_memory(response))
+
+        if self.memory_resource:
+            memory_compression_agent = MemoryCompressionAgent()
+            compression_config = {
+                        "threshold_tokens": 10000,
+                        "recent_messages_to_keep": 10,
+                        "enabled": True
+                        }
+            await memory_compression_agent.compress_conversation(self.agent_id, 
+                                                                compression_config,
+                                                                self.user_id,
+                                                                self.session_id)
         
         return response
     

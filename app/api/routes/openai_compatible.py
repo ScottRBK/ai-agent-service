@@ -64,7 +64,7 @@ async def chat_completions(request: ChatCompletionRequest):
     OpenAI-compatible chat completions endpoint.
     The 'model' parameter is interpreted as the agent_id.
     """
-    logger.info(f"OpenAI-compatible - chat completions - request: {request}")
+    logger.debug(f"OpenAI-compatible - chat completions - request: {request}")
     try:
         # Input validation
         if not isinstance(request.messages, list) or len(request.messages) == 0:
@@ -114,7 +114,7 @@ async def chat_completions(request: ChatCompletionRequest):
         
 
         response = await agent.chat(user_message)
-        logger.info(f"OpenAI-compatible - chat completions - response: {response}")    
+        logger.debug(f"OpenAI-compatible - chat completions - response: {response}")    
         # Format response in OpenAI format
         return ChatCompletionResponse(
             id="chatcmpl-123",

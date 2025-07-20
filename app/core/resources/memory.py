@@ -5,13 +5,13 @@ PostgreSQL memory resource for conversation history persistence.
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, Boolean, text
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.resources.base import BaseResource, ResourceType, ResourceError, ResourceConnectionError
-from app.models.resources.memory import MemoryEntry  # Import the Pydantic model
+from app.models.resources.memory import MemoryEntry, MemorySessionSummary 
 from app.utils.logging import logger
 
 Base = declarative_base()  # Add this line back
@@ -26,10 +26,22 @@ class MemoryEntryTable(Base):  # Renamed to avoid confusion
     agent_id = Column(String(255), nullable=False, index=True)
     content = Column(Text, nullable=False)
     entry_metadata = Column(Text, nullable=True) 
-    created_at = Column(DateTime, default=datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
+
+class MemorySessionSummaryTable(Base):
+    """Database table model for memory session summaries."""
+    __tablename__ = 'memory_session_summaries'
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(255), nullable=False, index=True)
+    session_id = Column(String(255), nullable=False, index=True)
+    agent_id = Column(String(255), nullable=False, index=True)
+    summary = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 class PostgreSQLMemoryResource(BaseResource):
     """PostgreSQL memory resource for conversation history."""
@@ -97,6 +109,7 @@ class PostgreSQLMemoryResource(BaseResource):
             raise ResourceError("Resource not initialized", self.resource_id)
         return self.SessionLocal()
     
+    
     async def store_memory(self, memory_entry: MemoryEntry) -> str:
         """Store a memory entry."""
         try:
@@ -114,7 +127,7 @@ class PostgreSQLMemoryResource(BaseResource):
                 session_id=memory_entry.session_id,
                 agent_id=memory_entry.agent_id,
                 content=json.dumps(memory_entry.content),
-                entry_metadata=json.dumps(memory_entry.entry_metadata) if memory_entry.entry_metadata else None,  # Fixed field name
+                entry_metadata=json.dumps(memory_entry.entry_metadata) if memory_entry.entry_metadata else None,  
                 expires_at=expires_at,
                 is_active=memory_entry.is_active
             )
@@ -134,18 +147,78 @@ class PostgreSQLMemoryResource(BaseResource):
         finally:
             db_session.close()
     
+    async def store_session_summary(self, session_summary: MemorySessionSummary) -> str:
+        """Store a session summary."""
+        try:
+            db_session = self._get_session()
+            
+            db_summary = MemorySessionSummaryTable(
+                id=session_summary.id or str(uuid.uuid4()),
+                user_id=session_summary.user_id,
+                session_id=session_summary.session_id,
+                agent_id=session_summary.agent_id,
+                summary=session_summary.summary,
+            )
+
+            db_session.add(db_summary)
+            db_session.commit()
+            
+            await self.record_successful_call()
+            logger.debug(f"Stored session summary {db_summary.id} for user {session_summary.user_id}")
+
+            return db_summary.id
+            
+        except SQLAlchemyError as e:
+            db_session.rollback()
+            await self.record_failed_call(ResourceError(f"Database error: {e}", self.resource_id))
+            raise ResourceError(f"Failed to store session summary: {e}", self.resource_id)
+        finally:
+            db_session.close()
+
+    async def get_session_summary(self, user_id: str, session_id: str, agent_id: str) -> MemorySessionSummary:
+        """Get a session summary."""
+        try:
+            db_session = self._get_session()
+            
+            summary = db_session.query(MemorySessionSummaryTable).filter(
+                MemorySessionSummaryTable.user_id == user_id,
+                MemorySessionSummaryTable.session_id == session_id,
+                MemorySessionSummaryTable.agent_id == agent_id
+            ).order_by(MemorySessionSummaryTable.created_at.desc()).first()
+            
+            if summary:
+                return MemorySessionSummary(
+                    id=summary.id,
+                    user_id=summary.user_id,
+                    session_id=summary.session_id,
+                    agent_id=summary.agent_id,
+                    summary=summary.summary,
+                    created_at=summary.created_at,
+                    updated_at=summary.updated_at
+                )
+            else:
+                return None
+            
+        except SQLAlchemyError as e:
+            await self.record_failed_call(ResourceError(f"Database error: {e}", self.resource_id))
+            raise ResourceError(f"Failed to get session summary: {e}", self.resource_id)
+        finally:
+            db_session.close()
+
     async def get_memories(
         self, 
         user_id: str, 
         session_id: Optional[str] = None,
         agent_id: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
+        order_by: str = "created_at",
+        order_direction: str = "desc"
     ) -> List[MemoryEntry]:
         """Get memory entries for a user."""
         try:
             db_session = self._get_session()
             
-            query = db_session.query(MemoryEntryTable).filter(  # Using the renamed table model
+            query = db_session.query(MemoryEntryTable).filter(
                 MemoryEntryTable.user_id == user_id,
                 MemoryEntryTable.is_active == True
             )
@@ -162,7 +235,14 @@ class PostgreSQLMemoryResource(BaseResource):
                 (MemoryEntryTable.expires_at > datetime.now(timezone.utc))
             )
             
-            query = query.order_by(MemoryEntryTable.created_at.desc()).limit(limit)
+            # Simple dynamic sorting
+            column = getattr(MemoryEntryTable, order_by)
+            if order_direction.lower() == "desc":
+                query = query.order_by(column.desc())
+            else:
+                query = query.order_by(column.asc())
+            
+            query = query.limit(limit)
             entries = query.all()
             
             # Convert to Pydantic models
@@ -246,3 +326,41 @@ class PostgreSQLMemoryResource(BaseResource):
             raise ResourceError(f"Failed to clear session: {e}", self.resource_id)
         finally:
             db_session.close()
+    
+    async def replace_memories_with_compressed(self, 
+                                              user_id: str, 
+                                              session_id: str, 
+                                              agent_id: str,
+                                              messages_to_delete: List[MemoryEntry],
+                                              compressed_history: List[Dict[str, str]]):
+        """
+        Replace existing memories with compressed version.
+        
+        Args:
+            user_id: User identifier
+            session_id: Session identifier
+            agent_id: Agent identifier
+            compressed_history: Compressed conversation history
+        """
+        try:
+            db_session = self._get_session()
+            
+            for message in messages_to_delete:
+                await self.delete_memory(message.id)
+            
+            # Store compressed history
+            for message in compressed_history:
+                memory_entry = MemoryEntry(
+                    user_id=user_id,
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    content={"role": message["role"], "content": message["content"]}
+
+                )
+                await self.store_memory(memory_entry)
+            
+            logger.info(f"Replaced memories with compressed version for {user_id}/{session_id}")
+            
+        except Exception as e:
+            logger.error(f"Error replacing memories with compressed version: {e}")
+            raise

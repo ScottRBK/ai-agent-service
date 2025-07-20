@@ -91,8 +91,14 @@ class OllamaProvider(BaseProvider):
         }
         if model_settings:
             request_params["options"] = model_settings
-
+        logger.info(f"OllamaProvider - send_chat - sending request to ollama")
         response: ChatResponse = await self.client.chat(**request_params)
+        logger.info(f"""OllamaProvider - send_chat - response from ollama received, 
+                        input tokens: {response.prompt_eval_count}, 
+                        output tokens: {response.eval_count},
+                        total tokens: {response.eval_count + response.prompt_eval_count},
+                        load duration: {response.load_duration},
+                        total duration: {response.total_duration}""")
         await self.record_successful_call()
         logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
                         Total: {self.total_requests}
