@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app.utils.logging import logger
 from openai import AsyncAzureOpenAI
 from datetime import datetime
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
 class AzureOpenAIProviderCC(BaseProvider):
     def __init__(self, config: AzureOpenAIConfig):
@@ -66,7 +66,6 @@ class AzureOpenAIProviderCC(BaseProvider):
             logger.warning(f"""Error during cleanup 
                             AzureOpenAI Provider {self.config.name} cleanup: {e}""")
 
-
     async def get_model_list(self) -> list[str]:
         """Get a list of available models."""
         return self.config.model_list
@@ -85,7 +84,7 @@ class AzureOpenAIProviderCC(BaseProvider):
         if instructions:
             messages.append({"role": "system", "content": instructions})
 
-        # Get available tools based on agent_id
+        
         available_tools = await self.get_available_tools(agent_id, tools)
         logger.debug(f"AzureOpenAIProviderCC - send_chat - available tools: {len(available_tools) if available_tools else 0}")
 
@@ -94,11 +93,9 @@ class AzureOpenAIProviderCC(BaseProvider):
         request_params = {
             "model": model,
             "messages": messages,
-            "tools": available_tools
+            "tools": available_tools,
+            **(model_settings if model_settings else {})
         }
-
-        if model_settings:
-            request_params.update(model_settings)
 
         response = await self.client.chat.completions.create(**request_params)
         await self.record_successful_call()
@@ -144,7 +141,142 @@ class AzureOpenAIProviderCC(BaseProvider):
         logger.debug(f"""AzureOpenAIProviderCC - send_chat - completed Total Requests: {self.total_requests}""")
         return response.choices[0].message.content
 
+    async def send_chat_with_streaming(self, context: list, 
+                                       model: str, 
+                                       instructions: str, 
+                                       tools: list[Tool] = None, 
+                                       agent_id: str = None, 
+                                       model_settings: Optional[dict] = None) -> AsyncGenerator[str, None]:
+        """Send input to the provider and return the response."""
+        
+        messages = []
 
-    async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool]) -> str:
-        """Stream input to the provider and yield the response."""
-        pass
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - model: {model}")
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - instructions: {instructions}")
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - context: {context}")
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - tools: {tools}")
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - agent_id: {agent_id}")
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - self.client: {self.client.base_url}")
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - model_settings: {model_settings}")
+
+        if instructions:
+            messages.append({"role": "system", "content": instructions})        
+
+        available_tools = await self.get_available_tools(agent_id, tools)
+        logger.debug(f"AzureOpenAIProviderCC - send_chat - available tools: {len(available_tools) if available_tools else 0}")
+
+        messages.extend(context)
+
+        logger.info(f"AzureOpenAIProviderCC - send_chat_with_streaming - starting streaming request to azure openai")
+
+        total_tool_iterations = 0 
+        while total_tool_iterations < self.max_tool_iterations:
+            try:
+                request_params = {
+                "model": model,
+                "messages": messages,
+                "tools": available_tools,
+                "stream": True,
+                **(model_settings if model_settings else {})
+            }
+
+                response = await self.client.chat.completions.create(**request_params)
+            except Exception as e:
+                logger.error(f"AzureOpenAIProviderCC - send_chat_with_streaming - API call failed: {e}")
+                yield f"Error: Failed to communicate with Azure OpenAI - {str(e)}"
+                return
+
+            assistant_content = ""
+            tool_calls = []
+            current_tool_call = {"id": None, "name": None, "args": ""}
+            arg_buffer = ""
+            
+            try:
+                async for chunk in response:
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            yield delta.content
+                            assistant_content += delta.content
+
+                        if delta.tool_calls:
+                            for tc in delta.tool_calls:
+                                if tc.id and tc.id != current_tool_call["id"]:
+                                    # New tool call, save the previous one if it exists
+                                    if current_tool_call["name"]:
+                                        tool_calls.append(current_tool_call.copy())
+                                    current_tool_call = {"id": tc.id, "name": None, "args": ""}
+                                    arg_buffer = ""
+                                
+                                if tc.function.name:
+                                    current_tool_call["name"] = tc.function.name
+                                if tc.function.arguments:
+                                    arg_buffer += tc.function.arguments
+                                    current_tool_call["args"] = arg_buffer
+                            
+                        if chunk.choices[0].finish_reason == "tool_calls":
+                                break
+            except Exception as e:
+                logger.error(f"AzureOpenAIProviderCC - send_chat_with_streaming - streaming error: {e}")
+                yield f"Error: Streaming interrupted - {str(e)}"
+                return
+            
+
+            if current_tool_call["name"]:
+                tool_calls.append(current_tool_call)
+
+            if assistant_content.strip():         
+                messages.append({"role": "assistant", "content": assistant_content})
+
+            for tool_call in tool_calls:
+                if tool_call["name"]:
+                    # Validate JSON before parsing
+                    try:
+                        args = json.loads(tool_call["args"])
+                        logger.info(f"Tool call: {tool_call['name']} - {tool_call['args']}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Invalid JSON in tool call args: {tool_call['args']}")
+                        logger.error(f"Error: {e}")
+                        continue
+
+                    messages.append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [{
+                            "id": tool_call["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tool_call["name"],
+                                "arguments": tool_call["args"]
+                            }
+                        }]
+                    })             
+                    
+                    try:
+                        tool_result = await self.execute_tool_call(tool_call["name"], 
+                                                                    args, 
+                                                                    agent_id)
+                        logger.info(f"Tool result: {str(tool_result)}")
+
+                        messages.append({       
+                            "role": "tool",
+                            "content": str(tool_result),
+                            "tool_call_id": tool_call["id"]
+                        })
+                    except Exception as e:
+                        logger.error(f"AzureOpenAIProviderCC - send_chat_with_streaming - error executing tool call: {e}")
+                        continue
+
+                    total_tool_iterations += 1
+            
+            # If no tool calls were made, break
+            if not tool_calls:
+                break
+
+        if total_tool_iterations >= self.max_tool_iterations:
+            logger.error(f"""AzureOpenAIProviderCC - send_chat_with_streaming - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
+            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+        
+        
+                
+                

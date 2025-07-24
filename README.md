@@ -1,6 +1,6 @@
 # AI Agent Service
 
-A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP that demonstrates how to implement agent tool management, prompt handling, and multi-provider AI integration from scratch. This project showcases a production-ready implementation of agent-specific tool filtering, dynamic system prompts, and unified provider interfaces without relying on abstraction frameworks. Built with Docker, comprehensive logging, and enterprise-grade features.
+A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP that demonstrates how to implement agent tool management, prompt handling, and multi-provider AI integration from scratch. This project showcases a production-ready implementation of agent-specific tool filtering, dynamic system prompts, and unified provider interfaces without relying on abstraction frameworks. Built with Docker, comprehensive logging, and enterprise-grade features. The service now includes comprehensive streaming support across all providers and API endpoints, enabling real-time response delivery and enhanced user experience.
 
 ## ✨ Features
 
@@ -24,6 +24,9 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 - **Memory Persistence** - PostgreSQL-based conversation history with automatic cleanup
 - **Memory Compression** - Intelligent conversation history management with AI-powered summarization
 - **Agent Resource Manager** - Per-agent resource access control and automatic resource creation
+- **Streaming Support** - Real-time response streaming across all providers and API endpoints
+- **Response Processing** - Automatic response cleaning and formatting for memory storage
+- **OpenAI-Compatible API** - Full OpenAI protocol compliance with streaming support
 
 ## 🚀 Quick Start
 
@@ -72,20 +75,20 @@ ai-agent-service/
 │   │       ├── __init__.py
 │   │       ├── health.py              # Health check endpoints
 │   │       ├── agents.py              # Agent management API
-│   │       └── openai_compatible.py   # OpenAI-compatible API
+│   │       └── openai_compatible.py   # OpenAI-compatible API with streaming
 │   ├── core/
 │   │   ├── agents/
 │   │   │   ├── agent_tool_manager.py    # Agent tool filtering with fastmcp
 │   │   │   ├── agent_resource_manager.py # Agent resource management
 │   │   │   ├── prompt_manager.py        # System prompt management
 │   │   │   ├── cli_agent.py             # CLI agent implementation
-│   │   │   ├── api_agent.py             # API agent implementation
+│   │   │   ├── api_agent.py             # API agent implementation with streaming
 │   │   │   └── memory_compression_agent.py # Memory compression agent
 │   │   ├── providers/
 │   │   │   ├── base.py                  # Base provider interface
-│   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API)
-│   │   │   ├── azureopenapi_cc.py       # Azure OpenAI (Chat Completions)
-│   │   │   └── ollama.py                # Ollama provider
+│   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API) with streaming
+│   │   │   ├── azureopenapi_cc.py       # Azure OpenAI (Chat Completions) with streaming
+│   │   │   └── ollama.py                # Ollama provider with streaming
 │   │   ├── resources/
 │   │   │   ├── base.py                  # Base resource interface
 │   │   │   ├── manager.py               # Global resource management
@@ -101,13 +104,17 @@ ai-agent-service/
 │   │   └── resources/
 │   │       └── memory.py                # Memory data models
 │   └── utils/
-│       └── logging.py                   # Logging configuration
+│       ├── logging.py                   # Logging configuration
+│       └── chat_utils.py                # Response cleaning utilities
 ├── tests/
 │   ├── test_core/
 │   │   ├── test_agents/                 # Agent unit tests
-│   │   ├── test_providers/              # Provider tests
+│   │   ├── test_providers/              # Provider tests with streaming
 │   │   ├── test_resources/              # Resource tests
 │   │   └── test_tools/                  # Tool tests
+│   ├── test_api/
+│   │   ├── test_agents.py               # Agent API tests
+│   │   └── test_openai_compatible_integration.py # OpenAI API tests with streaming
 │   └── test_integration/                # End-to-end tests
 ├── examples/
 │   └── run_agent.py                     # CLI agent runner
@@ -326,7 +333,7 @@ docker-compose --profile dev up --build
 ## 🤖 AI Agent & Tool Management
 
 ### Agent Configuration
-Configure agent-specific tool access, resources, and model settings via `agent_config.json`:
+Configure agent-specific tool access, resources, and model settings via `agent_config.json` (or `agent_config.example.json` for testing):
 
 ```json
 [
@@ -601,15 +608,27 @@ The service also provides OpenAI-compatible endpoints for seamless integration:
 ```bash
 POST /v1/chat/completions
 ```
-Standard OpenAI-compatible chat completions where the `model` parameter is interpreted as the `agent_id`.
+Standard OpenAI-compatible chat completions where the `model` parameter is interpreted as the `agent_id`. Supports both streaming and non-streaming responses.
 
-**Request:**
+**Non-streaming Request:**
 ```json
 {
   "model": "research_agent",
   "messages": [
     {"role": "user", "content": "What's the current time in Tokyo?"}
   ],
+  "temperature": 0.7
+}
+```
+
+**Streaming Request:**
+```json
+{
+  "model": "research_agent",
+  "messages": [
+    {"role": "user", "content": "What's the current time in Tokyo?"}
+  ],
+  "stream": true,
   "temperature": 0.7
 }
 ```
@@ -628,6 +647,8 @@ Returns all configured agents as available "models" for OpenAI-compatible client
 - **Session Management**: Maintain conversation history per user and session
 - **Tool Integration**: Full tool calling support with agent-specific permissions
 - **Multi-session Support**: Support for multiple concurrent sessions per user
+- **Streaming Support**: Real-time streaming responses with Server-Sent Events (SSE)
+- **Response Processing**: Automatic response cleaning and formatting for memory storage
 
 ### Example API Usage
 
@@ -647,7 +668,7 @@ curl -X POST "http://localhost:8001/agents/research_agent/chat" \
     "session_id": "session456"
   }'
 
-# Use OpenAI-compatible endpoint
+# Use OpenAI-compatible endpoint (non-streaming)
 curl -X POST "http://localhost:8001/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -d '{
@@ -656,11 +677,22 @@ curl -X POST "http://localhost:8001/v1/chat/completions" \
       {"role": "user", "content": "What is the current time in Tokyo?"}
     ]
   }'
+
+# Use OpenAI-compatible endpoint (streaming)
+curl -X POST "http://localhost:8001/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "research_agent",
+    "messages": [
+      {"role": "user", "content": "What is the current time in Tokyo?"}
+    ],
+    "stream": true
+  }'
 ```
 
 ### Agent Configuration
 
-Agents are configured in `agent_config.json`:
+Agents are configured in `agent_config.json` (or `agent_config.example.json` for testing):
 
 ```json
 [
@@ -721,7 +753,7 @@ Agents are configured in `agent_config.json`:
 ### Troubleshooting
 
 **Agent not found:**
-- Check `agent_config.json` exists and is valid JSON
+- Check `agent_config.json` (or `agent_config.example.json` for testing) exists and is valid JSON
 - Verify agent_id matches configuration
 
 **Provider not available:**
@@ -758,7 +790,7 @@ Agents are configured in `agent_config.json`:
 ## 🧪 Testing
 
 ### Test Coverage
-- **129+ tests** including unit and integration tests
+- **275+ tests** including unit and integration tests
 - **Agent tool filtering** - Comprehensive permission testing
 - **Resource management** - Memory resource CRUD operations and lifecycle
 - **Memory compression management** - Comprehensive testing of compression logic, token counting, and conversation splitting
@@ -771,6 +803,15 @@ Agents are configured in `agent_config.json`:
 - **Provider compatibility** - All providers tested
 - **Model configuration** - Agent config model settings and CLI parameter overrides
 - **Model settings flow** - Testing of settings passing from agent config to providers
+- **Streaming functionality** - Comprehensive testing of streaming capabilities across all components
+  - **Ollama Provider Streaming** - Testing of `send_chat_with_streaming` async generator
+  - **Azure OpenAI Provider Streaming** - Testing of streaming capabilities for both Azure providers
+  - **API Agent Streaming** - Testing of `chat_stream` method with memory integration
+  - **OpenAI-Compatible Streaming** - Testing of SSE streaming endpoint with proper format validation
+  - **Tool Call Streaming** - Testing of tool calls during streaming with max iteration limits
+  - **Streaming Error Handling** - Testing of error scenarios in streaming contexts
+  - **Streaming Memory Integration** - Testing of memory persistence during streaming
+  - **Response Cleaning** - Testing of `chat_utils.py` response cleaning functionality
 
 ### Running Tests
 ```bash
@@ -805,6 +846,11 @@ pytest tests/test_integration/test_basic_chat_agent_integration.py
 
 # Test fastmcp integration
 pytest tests/test_core/test_agents/test_agent_tool_manager.py
+
+# Test streaming functionality
+pytest tests/test_core/test_providers/test_ollama_provider.py -k "streaming"
+pytest tests/test_core/test_providers/test_azureopenapi_provider.py -k "streaming"
+pytest tests/test_api/test_openai_compatible_integration.py -k "streaming"
 ```
 
 ## 🛠️ Development
@@ -842,7 +888,7 @@ response = await provider.send_chat(
 
 ### Creating Custom Agents
 
-1. **Add agent configuration** to `agent_config.json`
+1. **Add agent configuration** to `agent_config.json` (or `agent_config.example.json` for testing)
 2. **Create prompt file** in `prompts/` directory (optional)
 3. **Define tool permissions** for the agent
 4. **Test the agent** using the run script

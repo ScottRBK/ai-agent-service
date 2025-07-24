@@ -8,7 +8,7 @@ class ToolType(str, Enum):
 class ToolParameters(BaseModel):
     """Base class for all tool parameters."""
     type: str = "object"
-    properties: Dict[str, Any]
+    properties: Dict[str, Any] = {}
     required: List[str] = []
 
 class Tool(BaseModel):

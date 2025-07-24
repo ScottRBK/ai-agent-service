@@ -84,7 +84,8 @@ def parse_arguments():
     parser.add_argument("agent_id", help="Agent ID to run")
     parser.add_argument("provider_id", nargs="?", help="Provider ID to use (optional, will use agent config if not specified)")
     parser.add_argument("--model", help="Model to use")
-    
+    parser.add_argument("--stream", action="store_true", help="Stream the response")
+
     # Generic settings - any key-value pair
     parser.add_argument("--setting", action="append", nargs=2, 
                        metavar=("KEY", "VALUE"), 
@@ -149,6 +150,9 @@ async def main():
     if model_settings:
         print(f"⚙️  Model settings: {model_settings}")
     print()
+
+    if args.stream:
+        print("🔄 Streaming mode enabled")
     
     # Validate agent and provider
     if not validate_agent_config(args.agent_id):
@@ -172,7 +176,7 @@ async def main():
     try:
         # Create agent with settings
         agent = CLIAgent(args.agent_id, provider_id, model=args.model, model_settings=model_settings)
-        await agent.interactive_mode()
+        await agent.interactive_mode(stream=args.stream)
         
     except KeyboardInterrupt:
         print("\n👋 Goodbye!")

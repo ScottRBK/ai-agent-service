@@ -11,7 +11,7 @@ from app.core.agents.agent_resource_manager import AgentResourceManager
 from app.core.agents.memory_compression_agent import MemoryCompressionAgent
 from app.utils.logging import logger
 from app.models.resources.memory import MemoryEntry, MemorySessionSummary
-from typing import List
+from typing import List, AsyncGenerator
 
 class CLIAgent:
     """
@@ -114,6 +114,38 @@ class CLIAgent:
         except Exception as e:
             logger.error(f"client agent - load_memory - Error loading memory for agent {self.agent_id}: {e}")
             return []
+        
+    async def chat_stream_with_memory(self, user_input: str) -> AsyncGenerator[str, None]:
+        """Send a message to the agent and stream the response"""
+        if not self.initialized:
+            await self.initialize()
+        
+        conversation_history = await self.load_memory()
+        conversation_history.append({"role": "user", "content": user_input})
+
+        full_response = ""
+        async for chunk in self.provider.send_chat_with_streaming(
+            context=conversation_history,
+            model=self.model,
+            instructions=self.system_prompt,
+            agent_id=self.agent_id,
+            model_settings=self.model_settings
+        ):
+            full_response += chunk
+            yield chunk
+
+        clean_response = self._clean_response_for_memory(full_response)
+        await self.save_memory("assistant", clean_response)
+        memory_compression_agent = MemoryCompressionAgent()
+        compression_config = {
+                    "threshold_tokens": 500,
+                    "recent_messages_to_keep": 4,
+                    "enabled": True
+                    }
+        await memory_compression_agent.compress_conversation(self.agent_id, 
+                                                            compression_config,
+                                                            self.user_id,
+                                                            self.session_id)
 
     async def chat_with_memory(self, user_input: str) -> str:
         """Send a message to the agent and get response."""
@@ -150,7 +182,28 @@ class CLIAgent:
        
         return response
     
-    async def chat(self, user_input: str) -> str:
+    async def chat_stream(self, user_input: str) -> AsyncGenerator[str, None]:
+        """Send a message to the agent and stream the response"""
+        if not self.initialized:
+            await self.initialize()
+            
+        # Add user message to history
+        self.conversation_history.append({"role": "user", "content": user_input})
+
+        full_response = ""
+        async for chunk in self.provider.send_chat_with_streaming(
+            context=self.conversation_history,
+            model=self.model,
+            instructions=self.system_prompt,
+            agent_id=self.agent_id,
+            model_settings=self.model_settings
+        ):
+            full_response += chunk
+            yield chunk
+
+        self.conversation_history.append({"role": "assistant", "content": full_response})
+    
+    async def chat(self, user_input: str,) -> str:
         """Send a message to the agent and get response."""
         if not self.initialized:
             await self.initialize()
@@ -175,7 +228,7 @@ class CLIAgent:
        
         return response
     
-    async def interactive_mode(self):
+    async def interactive_mode(self, stream: bool = False):
         """Run interactive chat mode."""
         await self.initialize()
         
@@ -197,8 +250,17 @@ class CLIAgent:
                     continue
                 
                 print("🤔 Thinking...")
-                response = await self.chat(user_input)
-                print(f"�� {self.agent_id}: {response}\n")
+                if stream:
+                    if self.memory_resource:
+                        async for chunk in self.chat_stream_with_memory(user_input):
+                            print(chunk, end="", flush=True)
+                    else:
+                        async for chunk in self.chat_stream(user_input):
+                            print(chunk, end="", flush=True)
+                    print("\n")  # Add newline after streaming
+                else:
+                    response = await self.chat(user_input)
+                    print(f"🤖 {self.agent_id}: {response}\n")
                   
                         
             except KeyboardInterrupt:

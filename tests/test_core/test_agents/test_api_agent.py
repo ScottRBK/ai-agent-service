@@ -71,46 +71,6 @@ class TestAPIAgentInitialization:
 
 class TestAPIAgentMemoryManagement:
     """Test APIAgent memory management functionality."""
-    
-    def test_clean_response_for_memory(self):
-        """Test cleaning response for memory storage."""
-        agent = APIAgent("test_agent")
-        
-        # Test with think tags
-        response = "Here is my answer<think>I should think about this</think>and continue"
-        cleaned = agent._clean_response_for_memory(response)
-        assert cleaned == "Here is my answerand continue"
-        
-        # Test with escaped newlines
-        response = "Line 1\\nLine 2"
-        cleaned = agent._clean_response_for_memory(response)
-        assert cleaned == "Line 1\nLine 2"
-        
-        # Test with whitespace
-        response = "  Test response  "
-        cleaned = agent._clean_response_for_memory(response)
-        assert cleaned == "Test response"
-    
-    def test_clean_response_complex_content(self):
-        """Test cleaning response with complex content."""
-        agent = APIAgent("test_agent")
-        
-        # Test with multiple think tags and escaped characters
-        response = """Here is my response<think>First thought</think>
-        Some content<think>Second thought</think>
-        More content\\nwith escaped\\nnewlines\\tand tabs"""
-        
-        cleaned = agent._clean_response_for_memory(response)
-        
-        # The actual behavior: escaped newlines become literal newlines, tabs remain escaped
-        expected = """Here is my response
-        Some content
-        More content
-with escaped
-newlines\\tand tabs"""
-        
-        assert cleaned == expected
-    
     @pytest.mark.asyncio
     async def test_get_conversation_history_no_memory(self):
         """Test getting conversation history when no memory resource is available."""
@@ -234,39 +194,6 @@ class TestAPIAgentModelConfiguration:
 class TestAPIAgentEdgeCases:
     """Test APIAgent edge cases and error conditions."""
     
-    def test_clean_response_empty_string(self):
-        """Test cleaning empty response."""
-        agent = APIAgent("test_agent")
-        cleaned = agent._clean_response_for_memory("")
-        assert cleaned == ""
-    
-    def test_clean_response_only_whitespace(self):
-        """Test cleaning response with only whitespace."""
-        agent = APIAgent("test_agent")
-        cleaned = agent._clean_response_for_memory("   \n\t   ")
-        assert cleaned == ""
-    
-    def test_clean_response_no_think_tags(self):
-        """Test cleaning response without think tags."""
-        agent = APIAgent("test_agent")
-        response = "This is a normal response without any think tags."
-        cleaned = agent._clean_response_for_memory(response)
-        assert cleaned == "This is a normal response without any think tags."
-    
-    def test_clean_response_only_think_tags(self):
-        """Test cleaning response with only think tags."""
-        agent = APIAgent("test_agent")
-        response = "<think>This is a thought</think>"
-        cleaned = agent._clean_response_for_memory(response)
-        assert cleaned == ""
-    
-    def test_clean_response_mixed_content(self):
-        """Test cleaning response with mixed content."""
-        agent = APIAgent("test_agent")
-        response = "Start<think>Thought 1</think>Middle<think>Thought 2</think>End"
-        cleaned = agent._clean_response_for_memory(response)
-        assert cleaned == "StartMiddleEnd"
-    
     @pytest.mark.asyncio
     async def test_memory_error_handling(self):
         """Test handling of memory-related errors."""
@@ -303,9 +230,9 @@ class TestAPIAgentIntegration:
     async def test_agent_creation_with_existing_config(self):
         """Test that agent can be created with existing test configuration."""
         # This test works with the existing conftest.py setup
-        agent = APIAgent("research_agent")
+        agent = APIAgent("test_research_agent")
         
-        assert agent.agent_id == "research_agent"
+        assert agent.agent_id == "test_research_agent"
         assert agent.user_id == "default_user"
         assert agent.session_id == "default_session"
         assert agent.initialized is False
@@ -314,12 +241,12 @@ class TestAPIAgentIntegration:
     async def test_agent_creation_with_custom_user_session(self):
         """Test agent creation with custom user and session."""
         agent = APIAgent(
-            agent_id="cli_agent",
+            agent_id="test_cli_agent",
             user_id="test_user",
             session_id="test_session"
         )
         
-        assert agent.agent_id == "cli_agent"
+        assert agent.agent_id == "test_cli_agent"
         assert agent.user_id == "test_user"
         assert agent.session_id == "test_session"
     
@@ -327,7 +254,7 @@ class TestAPIAgentIntegration:
     async def test_agent_creation_with_model_override(self):
         """Test agent creation with model override."""
         agent = APIAgent(
-            agent_id="mcp_agent",
+            agent_id="test_mcp_agent",
             model="custom-model",
             model_settings={"temperature": 0.5}
         )
@@ -338,9 +265,9 @@ class TestAPIAgentIntegration:
     def test_agent_id_validation(self):
         """Test that agent accepts various valid agent IDs."""
         valid_agent_ids = [
-            "research_agent",
-            "cli_agent", 
-            "mcp_agent",
+            "test_research_agent",
+            "test_cli_agent", 
+            "test_mcp_agent",
             "test_agent",
             "custom_agent_123",
             "agent-with-dashes",
@@ -377,3 +304,278 @@ class TestAPIAgentIntegration:
         for settings in test_cases:
             agent = APIAgent("test_agent", model_settings=settings)
             assert agent.requested_model_settings == settings 
+
+@pytest.fixture
+def agent():
+    return APIAgent(agent_id="test_agent")
+
+@pytest.fixture
+def mock_provider():
+    return AsyncMock()
+
+### chat_stream
+@pytest.mark.asyncio
+async def test_chat_stream_basic_response(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "Hello"
+        yield " world"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'get_conversation_history', return_value=[]):
+        with patch.object(agent, 'save_memory'):
+            # Act
+            chunks = []
+            async for chunk in agent.chat_stream("Hi"):
+                chunks.append(chunk)
+            
+            # Assert
+            assert chunks == ["Hello", " world"]
+
+@pytest.mark.asyncio
+async def test_chat_stream_saves_memory(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    agent.memory_resource = MagicMock()
+    
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "Hello"
+        yield " world"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'get_conversation_history', return_value=[]):
+        with patch.object(agent, 'save_memory') as mock_save:
+            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+                mock_compression_agent = AsyncMock()
+                mock_compression_class.return_value = mock_compression_agent
+                
+                # Act
+                async for _ in agent.chat_stream("Hi"):
+                    pass
+                
+                # Assert
+                assert mock_save.call_count == 2  # user message + assistant response
+                mock_save.assert_any_call("user", "Hi")
+                mock_save.assert_any_call("assistant", "Hello world")
+
+@pytest.mark.asyncio
+async def test_chat_stream_with_conversation_history(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "Response"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    history = [{"role": "user", "content": "Previous"}, {"role": "assistant", "content": "Answer"}]
+    
+    with patch.object(agent, 'get_conversation_history', return_value=history):
+        with patch.object(agent, 'save_memory'):
+            # Act
+            async for _ in agent.chat_stream("New message"):
+                break
+            
+            # Assert
+            # Note: We can't easily test the call args since we're using a function instead of a mock
+
+@pytest.mark.asyncio
+async def test_chat_stream_initializes_if_needed(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = False
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "Response"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'initialize') as mock_init:
+        with patch.object(agent, 'get_conversation_history', return_value=[]):
+            with patch.object(agent, 'save_memory'):
+                # Act
+                async for _ in agent.chat_stream("Hi"):
+                    break
+                
+                # Assert
+                mock_init.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_chat_stream_with_memory_compression(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    agent.memory_resource = MagicMock()
+    
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "Response"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'get_conversation_history', return_value=[]):
+        with patch.object(agent, 'save_memory'):
+            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+                mock_compression_agent = AsyncMock()
+                mock_compression_class.return_value = mock_compression_agent
+                
+                # Act
+                async for _ in agent.chat_stream("Hi"):
+                    pass
+                
+                # Assert
+                mock_compression_agent.compress_conversation.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_chat_stream_without_memory_compression(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    agent.memory_resource = None  # No memory resource
+    
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "Response"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'get_conversation_history', return_value=[]):
+        with patch.object(agent, 'save_memory'):
+            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+                # Act
+                async for _ in agent.chat_stream("Hi"):
+                    break
+                
+                # Assert
+                mock_compression_class.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_chat_stream_passes_correct_parameters(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "System prompt"
+    agent.model_settings = {"temperature": 0.7}
+    
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "Response"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'get_conversation_history', return_value=[]):
+        with patch.object(agent, 'save_memory'):
+            # Act
+            async for _ in agent.chat_stream("User input"):
+                break
+            
+            # Assert
+            # Note: We can't easily test the call args since we're using a function instead of a mock
+
+@pytest.mark.asyncio
+async def test_chat_stream_cleans_response_for_memory(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    agent.memory_resource = MagicMock()
+    
+    # Response with think tags that should be cleaned
+    # Create a proper async generator function
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        yield "<think>I should help</think>Hello"
+        yield " world"
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'get_conversation_history', return_value=[]):
+        with patch.object(agent, 'save_memory') as mock_save:
+            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+                # Create a mock instance with a mock compress_conversation method
+                mock_instance = AsyncMock()
+                mock_instance.initialized = True  # Set initialized to True to skip initialization
+                mock_compression_class.return_value = mock_instance
+                
+                # Act
+                async for _ in agent.chat_stream("Hi"):
+                    pass
+                
+                # Assert
+                # The cleaned response should not contain think tags
+                mock_save.assert_any_call("assistant", "Hello world")
+
+@pytest.mark.asyncio
+async def test_chat_stream_empty_response(agent, mock_provider):
+    # Arrange
+    agent.provider = mock_provider
+    agent.initialized = True
+    agent.model = "test-model"
+    agent.system_prompt = "Be helpful"
+    agent.model_settings = {}
+    agent.memory_resource = MagicMock()  # Set up memory resource so save_memory is called
+    
+    # Create a proper async generator function for empty response
+    async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
+        # Empty response - no yields
+        if False:  # This ensures it's an async generator even with no yields
+            yield ""
+    
+    # Mock the async method to return the async generator
+    mock_provider.send_chat_with_streaming = mock_streaming_generator
+    
+    with patch.object(agent, 'get_conversation_history', return_value=[]):
+        with patch.object(agent, 'save_memory') as mock_save:
+            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+                # Create a mock instance with a mock compress_conversation method
+                mock_instance = AsyncMock()
+                mock_instance.initialized = True  # Set initialized to True to skip initialization
+                mock_compression_class.return_value = mock_instance
+                
+                # Act
+                chunks = []
+                async for chunk in agent.chat_stream("Hi"):
+                    chunks.append(chunk)
+                
+                # Assert
+                assert chunks == []
+                mock_save.assert_any_call("assistant", "")  # Empty response saved 

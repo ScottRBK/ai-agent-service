@@ -1,5 +1,7 @@
 # tests/conftest.py
 import pytest
+import json
+import os
 from fastapi.testclient import TestClient
 from app.main import app
 from app.config.settings import Settings
@@ -37,21 +39,45 @@ def mock_providers():
         
         yield mock_provider_manager
 
+def load_example_agent_configs():
+    """Load agent configurations from agent_config.example.json for testing."""
+    try:
+        config_path = "agent_config.example.json"
+        if os.path.exists(config_path):
+            with open(config_path, "r") as f:
+                configs = json.load(f)
+            
+            if isinstance(configs, dict):
+                return [configs]
+            elif isinstance(configs, list):
+                return configs
+            else:
+                return []
+        else:
+            # Fallback to default configs if example file doesn't exist
+            return [
+                {"agent_id": "test_research_agent", "provider": "azure_openai_cc", "model": "gpt-4o-mini", "resources": ["memory"]},
+                {"agent_id": "test_cli_agent", "provider": "ollama", "model": "qwen3:4b", "resources": ["memory"]},
+                {"agent_id": "test_agent", "provider": "azure_openai_cc", "model": "gpt-4o-mini", "resources": ["memory"]}
+            ]
+    except Exception as e:
+        # Fallback to default configs if there's an error
+        return [
+            {"agent_id": "test_research_agent", "provider": "azure_openai_cc", "model": "gpt-4o-mini", "resources": ["memory"]},
+            {"agent_id": "test_cli_agent", "provider": "ollama", "model": "qwen3:4b", "resources": ["memory"]},
+            {"agent_id": "test_agent", "provider": "azure_openai_cc", "model": "gpt-4o-mini", "resources": ["memory"]}
+        ]
+
 @pytest.fixture(autouse=True)
 def mock_load_agent_configs(monkeypatch):
-    """Patch load_agent_configs to update the global set of agent IDs for the mock agent."""
+    """Patch load_agent_configs to load from agent_config.example.json for testing."""
     from app.api.routes import agents as agents_module
     from app.api.routes import openai_compatible as openai_compatible_module
     
-    # Create a mock function that can be controlled by tests
+    # Create a mock function that loads from the example config
     def mock_load_agent_configs(*args, **kwargs):
         global current_agent_ids
-        # Default to actual config for tests that don't override
-        configs = [
-            {"agent_id": "research_agent", "provider": "azure_openai_cc", "model": "gpt-4o-mini", "resources": ["memory"]},
-            {"agent_id": "cli_agent", "provider": "ollama", "model": "qwen3:4b", "resources": ["memory"]},
-            {"agent_id": "test_agent", "provider": "azure_openai_cc", "model": "gpt-4o-mini", "resources": ["memory"]}
-        ]
+        configs = load_example_agent_configs()
         current_agent_ids = set()
         if isinstance(configs, list):
             for agent in configs:

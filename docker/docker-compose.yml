@@ -54,7 +54,6 @@ services:
       - ${AGENT_CONFIG_FILE:-../agent_config.json}:/app/config/agent_config.json:ro
       - ${MCP_CONFIG_FILE:-../mcp.json}:/app/config/mcp.json:ro
       - ${PROMPTS_DIR:-../prompts}:/app/config/prompts:ro
-
   postgres:
     image: postgres:16-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-ai-agent-service-dev}-postgres

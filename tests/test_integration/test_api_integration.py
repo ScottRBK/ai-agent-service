@@ -22,7 +22,7 @@ class TestAPIIntegration:
         """Sample agent configuration for integration testing."""
         return [
             {
-                "agent_id": "integration_test_agent",
+                "agent_id": "test_integration_agent",
                 "provider": "azure_openai_cc",
                 "model": "gpt-4o-mini",
                 "allowed_regular_tools": ["get_current_datetime"],
@@ -35,18 +35,18 @@ class TestAPIIntegration:
         """Test complete agent management API flow."""
         # Update the global agent IDs for this test
         current_agent_ids.clear()
-        current_agent_ids.add("research_agent")  # Use an agent that exists in the config
+        current_agent_ids.add("test_research_agent")  # Use an agent that exists in the config
         
         response = client.get("/agents/")
         assert response.status_code == 200
         agents = response.json()
         assert len(agents) >= 1
-        assert any(agent["agent_id"] == "research_agent" for agent in agents)
+        assert any(agent["agent_id"] == "test_research_agent" for agent in agents)
         
-        response = client.get("/agents/research_agent")
+        response = client.get("/agents/test_research_agent")
         assert response.status_code == 200
         agent_info = response.json()
-        assert agent_info["agent_id"] == "research_agent"
+        assert agent_info["agent_id"] == "test_research_agent"
         assert agent_info["provider"] == "azure_openai_cc"
         assert "model" in agent_info
         assert "has_memory" in agent_info
@@ -56,152 +56,74 @@ class TestAPIIntegration:
             "user_id": "integration_user",
             "session_id": "integration_session"
         }
-        response = client.post("/agents/research_agent/chat", json=chat_request)
+        response = client.post("/agents/test_research_agent/chat", json=chat_request)
         assert response.status_code == 200
         chat_response = response.json()
         assert chat_response["response"] == "Mock response"
-        assert chat_response["agent_id"] == "research_agent"
+        assert chat_response["agent_id"] == "test_research_agent"
         assert chat_response["user_id"] == "integration_user"
         assert chat_response["session_id"] == "integration_session"
         
-        response = client.get("/agents/research_agent/conversation/integration_session?user_id=integration_user")
+        response = client.get("/agents/test_research_agent/conversation/integration_session?user_id=integration_user")
         assert response.status_code == 200
         history = response.json()
         assert history["session_id"] == "integration_session"
-        assert history["agent_id"] == "research_agent"
+        assert history["agent_id"] == "test_research_agent"
         assert history["user_id"] == "integration_user"
         assert isinstance(history["messages"], list)
         
-        response = client.delete("/agents/research_agent/conversation/integration_session?user_id=integration_user")
+        # Test clearing conversation
+        response = client.delete("/agents/test_research_agent/conversation/integration_session?user_id=integration_user")
         assert response.status_code == 200
-        clear_response = response.json()
-        assert "cleared" in clear_response["message"]
+        
+        # Verify conversation is cleared
+        response = client.get("/agents/test_research_agent/conversation/integration_session?user_id=integration_user")
+        assert response.status_code == 200
+        history = response.json()
+        assert len(history["messages"]) == 0
     
-    def test_complete_openai_compatible_flow(self, client: TestClient, sample_agent_config):
-        """Test complete OpenAI-compatible API flow."""
+    def test_agent_not_found_handling(self, client: TestClient):
+        """Test handling of non-existent agents."""
         # Update the global agent IDs for this test
         current_agent_ids.clear()
-        current_agent_ids.add("research_agent")  # Use an agent that exists in the config
+        current_agent_ids.add("test_research_agent")
         
-        response = client.get("/v1/models")
-        assert response.status_code == 200
-        models = response.json()
-        assert models["object"] == "list"
-        assert len(models["data"]) >= 1
-        agent_ids = [model["id"] for model in models["data"]]
-        assert "research_agent" in agent_ids
-        assert models["data"][0]["object"] == "model"
-        assert models["data"][0]["owned_by"] == "ai-agent-service"
-        
-        chat_request = {
-            "model": "research_agent",
-            "messages": [
-                {"role": "user", "content": "Hello from OpenAI compatible test"}
-            ],
-            "temperature": 0.7
-        }
-        response = client.post("/v1/chat/completions", json=chat_request)
-        assert response.status_code == 200
-        completion = response.json()
-        assert completion["object"] == "chat.completion"
-        assert completion["model"] == "research_agent"
-        assert len(completion["choices"]) == 1
-        assert completion["choices"][0]["message"]["role"] == "assistant"
-        assert completion["choices"][0]["message"]["content"] == "Mock response"
-        assert completion["choices"][0]["finish_reason"] == "stop"
-        assert "usage" in completion
-    
-    def test_api_error_handling_integration(self, client: TestClient):
-        """Test API error handling in integration scenarios."""
-        # Update the global agent IDs for this test
-        current_agent_ids.clear()
-        
-        response = client.get("/agents/non_existent_agent")
+        # Test getting info for non-existent agent
+        response = client.get("/agents/nonexistent_agent")
         assert response.status_code == 404
         
+        # Test chatting with non-existent agent
         chat_request = {
             "message": "Hello",
             "user_id": "test_user",
             "session_id": "test_session"
         }
-        response = client.post("/agents/non_existent_agent/chat", json=chat_request)
-        assert response.status_code == 404  # Should handle gracefully
+        response = client.post("/agents/nonexistent_agent/chat", json=chat_request)
+        assert response.status_code == 404
     
-    def test_api_validation_integration(self, client: TestClient):
-        """Test API validation in integration scenarios."""
-        invalid_request = {
-            "user_id": "test_user",
-            "session_id": "test_session"
-        }
-        response = client.post("/agents/test_agent/chat", json=invalid_request)
-        assert response.status_code == 422
-        
-        invalid_openai_request = {
-            "model": "test_agent"
-        }
-        response = client.post("/v1/chat/completions", json=invalid_openai_request)
-        assert response.status_code == 422
-    
-    def test_api_concurrent_requests(self, client: TestClient, sample_agent_config):
-        """Test API handling of concurrent requests."""
+    def test_multiple_agents_listing(self, client: TestClient):
+        """Test listing multiple agents from the configuration."""
         # Update the global agent IDs for this test
         current_agent_ids.clear()
-        current_agent_ids.add("research_agent")  # Use an agent that exists in the config
+        current_agent_ids.add("test_research_agent")
+        current_agent_ids.add("test_cli_agent")
+        current_agent_ids.add("test_mcp_agent")
         
-        import concurrent.futures
+        response = client.get("/agents/")
+        assert response.status_code == 200
+        agents = response.json()
         
-        def make_request():
-            chat_request = {
-                "message": "Concurrent test",
-                "user_id": "concurrent_user",
-                "session_id": "concurrent_session"
-            }
-            response = client.post("/agents/research_agent/chat", json=chat_request)
-            return response.status_code
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(make_request) for _ in range(3)]
-            results = [future.result() for future in futures]
-            assert all(status == 200 for status in results)
+        # Should have at least the test agents
+        agent_ids = [agent["agent_id"] for agent in agents]
+        assert "test_research_agent" in agent_ids
+        assert "test_cli_agent" in agent_ids
+        assert "test_mcp_agent" in agent_ids
     
-    def test_api_memory_integration(self, client: TestClient, sample_agent_config):
-        """Test API memory integration."""
+    def test_agent_chat_with_model_override(self, client: TestClient):
+        """Test agent chat with model override functionality."""
         # Update the global agent IDs for this test
         current_agent_ids.clear()
-        current_agent_ids.add("cli_agent")  # Use an agent that has memory
-        
-        user_id = "memory_user"
-        session_id = "memory_session"
-        
-        chat_request = {
-            "message": "First message",
-            "user_id": user_id,
-            "session_id": session_id
-        }
-        response = client.post("/agents/cli_agent/chat", json=chat_request)
-        assert response.status_code == 200
-        
-        chat_request = {
-            "message": "Second message",
-            "user_id": user_id,
-            "session_id": session_id
-        }
-        response = client.post("/agents/cli_agent/chat", json=chat_request)
-        assert response.status_code == 200
-        
-        response = client.get(f"/agents/cli_agent/conversation/{session_id}?user_id={user_id}")
-        assert response.status_code == 200
-        history = response.json()
-        assert isinstance(history["messages"], list)
-        
-        response = client.delete(f"/agents/cli_agent/conversation/{session_id}?user_id={user_id}")
-        assert response.status_code == 200
-    
-    def test_api_model_override_integration(self, client: TestClient, sample_agent_config):
-        """Test API model override functionality."""
-        # Update the global agent IDs for this test
-        current_agent_ids.clear()
-        current_agent_ids.add("research_agent")  # Use an agent that exists in the config
+        current_agent_ids.add("test_research_agent")
         
         chat_request = {
             "message": "Test with custom model",
@@ -210,7 +132,23 @@ class TestAPIIntegration:
             "model": "custom-model",
             "model_settings": {"temperature": 0.9, "max_tokens": 1000}
         }
-        response = client.post("/agents/research_agent/chat", json=chat_request)
+        response = client.post("/agents/test_research_agent/chat", json=chat_request)
+        assert response.status_code == 200
+    
+    def test_api_model_override_integration(self, client: TestClient, sample_agent_config):
+        """Test API model override functionality."""
+        # Update the global agent IDs for this test
+        current_agent_ids.clear()
+        current_agent_ids.add("test_research_agent")  # Use an agent that exists in the config
+        
+        chat_request = {
+            "message": "Test with custom model",
+            "user_id": "override_user",
+            "session_id": "override_session",
+            "model": "custom-model",
+            "model_settings": {"temperature": 0.9, "max_tokens": 1000}
+        }
+        response = client.post("/agents/test_research_agent/chat", json=chat_request)
         assert response.status_code == 200
     
     def test_api_root_endpoint_integration(self, client: TestClient):

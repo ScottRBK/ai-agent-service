@@ -28,6 +28,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 # Install uv globally
 RUN pip install uv
+RUN uv tool install arxiv-mcp-server
 
 # Copy requirements first for better caching
 COPY requirements.txt /tmp/requirements.txt

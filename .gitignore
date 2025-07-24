@@ -27,7 +27,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 mcp.json
+
 agent_config.json
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -135,6 +137,9 @@ dmypy.json
 *.swp
 *.swo
 *~
+.cursorrules
+.cursor/
+CLAUDE.md
 
 # OS
 .DS_Store

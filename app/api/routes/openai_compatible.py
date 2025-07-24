@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from app.core.agents.api_agent import APIAgent
@@ -58,11 +59,12 @@ class ChatCompletionResponse(BaseModel):
     choices: List[Dict[str, Any]]
     usage: Dict[str, int]
 
-@router.post("/chat/completions", response_model=ChatCompletionResponse)
+@router.post("/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
     """
     OpenAI-compatible chat completions endpoint.
     The 'model' parameter is interpreted as the agent_id.
+    Supports both streaming and non-streaming responses.
     """
     logger.debug(f"OpenAI-compatible - chat completions - request: {request}")
     try:
@@ -88,7 +90,6 @@ async def chat_completions(request: ChatCompletionRequest):
         if not any(agent.get("agent_id") == agent_id for agent in agent_configs):
             raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
         
-
         try:
             user_message = request.messages[-1]["content"]
         except IndexError:
@@ -105,43 +106,89 @@ async def chat_completions(request: ChatCompletionRequest):
             session_id=session_id
         )
 
-        
-
         # Initialize the agent
         await agent.initialize()
 
-        # Use the agent's chat method instead of calling provider directly
-        # This ensures proper memory handling and conversation flow
-
-        
-
-        response = await agent.chat(user_message)
-        logger.debug(f"OpenAI-compatible - chat completions - response: {response}")    
-        # Format response in OpenAI format
-        return ChatCompletionResponse(
-            id="chatcmpl-123",
-            created=int(time.time()),
-            model=agent_id,
-            choices=[{
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": response
-                },
-                "finish_reason": "stop"
-            }],
-            usage={
-                "prompt_tokens": 0,  # Could be calculated
-                "completion_tokens": 0,
-                "total_tokens": 0
-            }
-        )
+        # Handle streaming vs non-streaming
+        if request.stream:
+            return StreamingResponse(
+                stream_chat_response(agent, user_message, agent_id, request),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/event-stream",
+                }
+            )
+        else:
+            # Non-streaming response
+            response = await agent.chat(user_message)
+            logger.debug(f"OpenAI-compatible - chat completions - response: {response}")    
+            
+            # Format response in OpenAI format
+            return ChatCompletionResponse(
+                id="chatcmpl-123",
+                created=int(time.time()),
+                model=agent_id,
+                choices=[{
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": response
+                    },
+                    "finish_reason": "stop"
+                }],
+                usage={
+                    "prompt_tokens": 0,  # Could be calculated
+                    "completion_tokens": 0,
+                    "total_tokens": 0
+                }
+            )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error in chat_completions: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+async def stream_chat_response(agent: APIAgent, user_message: str, agent_id: str, request: ChatCompletionRequest):
+    """Stream chat response in OpenAI-compatible format"""
+    completion_id = f"chatcmpl-{int(time.time())}"
+    created_time = int(time.time())
+    
+    # Send initial data
+    yield f"data: {json.dumps({'id': completion_id, 'object': 'chat.completion.chunk', 'created': created_time, 'model': agent_id, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
+    
+    # Stream the response
+    async for chunk in agent.chat_stream(user_message):
+        # Format chunk in OpenAI streaming format
+        chunk_data = {
+            'id': completion_id,
+            'object': 'chat.completion.chunk',
+            'created': created_time,
+            'model': agent_id,
+            'choices': [{
+                'index': 0,
+                'delta': {'content': chunk},
+                'finish_reason': None
+            }]
+        }
+        yield f"data: {json.dumps(chunk_data)}\n\n"
+    
+    # Send final data
+    final_data = {
+        'id': completion_id,
+        'object': 'chat.completion.chunk',
+        'created': created_time,
+        'model': agent_id,
+        'choices': [{
+            'index': 0,
+            'delta': {},
+            'finish_reason': 'stop'
+        }]
+    }
+    yield f"data: {json.dumps(final_data)}\n\n"
+    yield "data: [DONE]\n\n"
 
 @router.get("/models")
 async def list_models():

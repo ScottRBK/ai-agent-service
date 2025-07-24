@@ -3,12 +3,13 @@ API Agent implementation for FastAPI integration.
 Based on CLIAgent but optimized for API usage.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, AsyncGenerator
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.providers.manager import ProviderManager
 from app.core.agents.prompt_manager import PromptManager
 from app.core.agents.agent_resource_manager import AgentResourceManager
 from app.utils.logging import logger
+from app.utils.chat_utils import clean_response_for_memory
 from app.models.resources.memory import MemoryEntry, MemorySessionSummary
 from app.core.agents.memory_compression_agent import MemoryCompressionAgent
 
@@ -100,13 +101,6 @@ class APIAgent:
         conversation_history.extend([{"role": memory.content["role"], "content": memory.content["content"]} for memory in memories])
         return conversation_history
     
-    def _clean_response_for_memory(self, response: str) -> str:
-        """Clean response before storing in memory"""
-        import re
-        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        response = response.replace('\\n', '\n')
-        return response.strip()
-    
     async def save_memory(self, role: str, content: str):
         """Save a memory entry"""
         if self.memory_resource:
@@ -136,11 +130,12 @@ class APIAgent:
             model=self.model,
             instructions=self.system_prompt,
             agent_id=self.agent_id,
+            tools=None,
             model_settings=self.model_settings
         )
         
         # Save assistant response
-        await self.save_memory("assistant", self._clean_response_for_memory(response))
+        await self.save_memory("assistant", clean_response_for_memory(response))
 
         if self.memory_resource:
             memory_compression_agent = MemoryCompressionAgent()
@@ -164,3 +159,45 @@ class APIAgent:
                 self.session_id, 
                 self.agent_id
             )
+
+    async def chat_stream(self, user_input: str) -> AsyncGenerator[str, None]:
+        """Send a message to the agent and stream the response"""
+        if not self.initialized:
+            await self.initialize()
+        
+        # Get conversation history
+        conversation_history = await self.get_conversation_history()
+        
+        # Add user message
+        conversation_history.append({"role": "user", "content": user_input})
+        if self.memory_resource:
+            await self.save_memory("user", user_input)
+        
+        # Stream response from provider
+        full_response = ""
+        async for chunk in self.provider.send_chat_with_streaming(
+            context=conversation_history,
+            model=self.model,
+            instructions=self.system_prompt,
+            agent_id=self.agent_id,
+            tools=None,
+            model_settings=self.model_settings
+        ):
+            full_response += chunk
+            yield chunk
+        
+        # Save assistant response after streaming is complete
+        if self.memory_resource:
+            await self.save_memory("assistant", clean_response_for_memory(full_response))
+
+        if self.memory_resource:
+            memory_compression_agent = MemoryCompressionAgent()
+            compression_config = {
+                        "threshold_tokens": 10000,
+                        "recent_messages_to_keep": 10,
+                        "enabled": True
+                        }
+            await memory_compression_agent.compress_conversation(self.agent_id, 
+                                                                compression_config,
+                                                                self.user_id,
+                                                                self.session_id)

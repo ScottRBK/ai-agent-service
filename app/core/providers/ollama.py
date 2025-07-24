@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from app.utils.logging import logger
 from ollama import AsyncClient, ChatResponse, Message
 from datetime import datetime
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
 class OllamaProvider(BaseProvider):
     def __init__(self, config: OllamaConfig):
@@ -19,7 +19,6 @@ class OllamaProvider(BaseProvider):
         self.config: OllamaConfig = config
         self.version = importlib.metadata.version("ollama")
         # self.config.model_list = self.client.list()
-
 
     async def initialize(self) -> None:
         """Initialize resources."""
@@ -59,6 +58,85 @@ class OllamaProvider(BaseProvider):
     async def get_model_list(self) -> list[str]:
         """Get a list of available models."""
         return self.config.model_list
+    
+    async def send_chat_with_streaming(self, context: list, model: str, 
+                        instructions: str, 
+                        tools: list[Tool] = None, 
+                        agent_id: str = None,
+                        model_settings: Optional[dict] = None) -> AsyncGenerator[str, None]:
+        """Send input to the provider and return the response."""
+
+        messages = []
+        
+        logger.debug(f"OllamaProvider - send_chat_with_streaming - model: {model}")
+        logger.debug(f"OllamaProvider - send_chat_with_streaming - instructions: {instructions}")
+        logger.debug(f"OllamaProvider - send_chat_with_streaming - context: {context}")
+        logger.debug(f"OllamaProvider - send_chat_with_streaming - tools: {tools}")
+        logger.debug(f"OllamaProvider - send_chat_with_streaming - agent_id: {agent_id}")
+        logger.debug(f"OllamaProvider - send_chat_with_streaming - self.client: {self.config.base_url}")
+
+        if instructions:
+            messages.append({"role": "system", "content": instructions})
+
+        available_tools = await self.get_available_tools(agent_id, tools)
+        logger.debug(f"OllamaProvider - send_chat_with_streaming - available tools: {len(available_tools) if available_tools else 0}")
+
+        messages.extend(context)
+        
+        logger.info(f"OllamaProvider - send_chat_with_streaming - starting streaming request to ollama")
+        
+        total_tool_iterations = 0
+        while total_tool_iterations < self.max_tool_iterations:
+            request_params = {
+            "model": model,
+            "messages": messages,
+            "tools": available_tools,
+            "stream": True,
+            **({"options": model_settings} if model_settings else {})
+            }
+            
+            response: ChatResponse = await self.client.chat(**request_params)
+            assistant_content = ""
+            tool_calls_to_process = []
+            async for chunk in response:
+                if chunk.message.content:
+                    assistant_content += chunk.message.content
+                    yield chunk.message.content
+
+                if chunk.message.tool_calls:
+                    logger.info(f"OllamaProvider - send_chat_with_streaming - tool_calls: {chunk.message.tool_calls}")
+                    tool_calls_to_process.extend(chunk.message.tool_calls)
+
+            if assistant_content.strip():
+                messages.append({"role": "assistant", "content": assistant_content})
+
+            if not tool_calls_to_process:
+                break
+
+            for tool_call in tool_calls_to_process:
+                logger.info(f"OllamaProvider - send_chat_with_streaming - tool_call: {tool_call.function.name}")
+                messages.append({
+                                "role": "assistant",
+                                "tool_calls": [{
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_call.function.name,
+                                        "arguments": tool_call.function.arguments,
+                                    },
+                                }],
+                            })
+                tool_result = await self.execute_tool_call(tool_call.function.name, tool_call.function.arguments, agent_id)               
+                messages.append({
+                    "role": "tool",
+                    "content": str(tool_result)
+                })
+                total_tool_iterations += 1
+
+        
+        if total_tool_iterations >= self.max_tool_iterations:
+            logger.error(f"""OllamaProvider - send_chat_with_streaming - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
+            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+        
 
     async def send_chat(self, context: list, model: str, 
                         instructions: str, 
@@ -78,7 +156,7 @@ class OllamaProvider(BaseProvider):
         if instructions:
             messages.append({"role": "system", "content": instructions})
 
-        # Get available tools using AgentToolManager if agent_id is provided
+        
         available_tools = await self.get_available_tools(agent_id, tools)
         logger.debug(f"OllamaProvider - send_chat - available tools: {len(available_tools) if available_tools else 0}")
 
@@ -136,7 +214,4 @@ class OllamaProvider(BaseProvider):
 
         logger.debug(f"""OllamaProvider - send_chat - completed Total Requests: {self.total_requests}""")
         return response.message.content
-    
-    async def stream_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None) -> str:
-        """Stream input to the provider and yield the response."""
-        pass
+ 

@@ -171,6 +171,11 @@ async def get_conversation_history(
 ):
     """Get conversation history for a specific session"""
     try:
+        # Check if agent exists
+        agents = load_agent_configs()
+        if not any(agent.get("agent_id") == agent_id for agent in agents):
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+
         agent = APIAgent(
             agent_id=agent_id,
             user_id=user_id,
@@ -187,6 +192,8 @@ async def get_conversation_history(
             user_id=user_id
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting conversation history: {e}")
         raise HTTPException(status_code=500, detail=str(e))

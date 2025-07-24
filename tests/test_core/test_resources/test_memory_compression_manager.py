@@ -148,8 +148,8 @@ class TestMemoryCompressionManager:
         
         assert result is False
         compression_manager.token_counter.count_conversation_tokens.assert_called_once()
-        mock_logger.debug.assert_called_once()
-        mock_logger.info.assert_not_called()
+        mock_logger.info.assert_called_once()
+        mock_logger.debug.assert_not_called()
     
     @patch('app.core.resources.memory_compression_manager.logger')
     def test_should_compress_above_threshold(self, mock_logger, compression_manager, sample_memory_entries):
@@ -161,8 +161,8 @@ class TestMemoryCompressionManager:
         
         assert result is True
         compression_manager.token_counter.count_conversation_tokens.assert_called_once()
-        mock_logger.debug.assert_called_once()
-        mock_logger.info.assert_called_once()
+        mock_logger.info.assert_called()
+        mock_logger.debug.assert_not_called()
     
     @patch('app.core.resources.memory_compression_manager.logger')
     def test_should_compress_exact_threshold(self, mock_logger, compression_manager, sample_memory_entries):
@@ -174,8 +174,8 @@ class TestMemoryCompressionManager:
         
         assert result is False  # Should not compress when exactly at threshold
         compression_manager.token_counter.count_conversation_tokens.assert_called_once()
-        mock_logger.debug.assert_called_once()
-        mock_logger.info.assert_not_called()
+        mock_logger.info.assert_called_once()
+        mock_logger.debug.assert_not_called()
     
     def test_should_compress_conversation_format(self, compression_manager, sample_memory_entries):
         """Test that should_compress formats conversation correctly for token counting."""

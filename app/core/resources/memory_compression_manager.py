@@ -38,7 +38,7 @@ class MemoryCompressionManager:
         
             
         total_tokens = self.token_counter.count_conversation_tokens([{"role": memory.content["role"], "content": memory.content["content"]} for memory in conversation_history])
-        logger.debug(f"MemoryCompressionManager- should_compress - Total tokens: {total_tokens}, Threshold tokens: {self.threshold_tokens}")
+        logger.info(f"MemoryCompressionManager- should_compress - Total tokens: {total_tokens}, Threshold tokens: {self.threshold_tokens}")
         should_compress = total_tokens > self.threshold_tokens
         
         if should_compress:

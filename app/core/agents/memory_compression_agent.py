@@ -11,7 +11,7 @@ from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.resources.memory_compression_manager import MemoryCompressionManager
 from app.models.resources.memory import MemorySessionSummary
 from app.utils.logging import logger
-
+from app.utils.chat_utils import clean_response_for_memory
 
 class MemoryCompressionAgent:
     """
@@ -139,6 +139,11 @@ class MemoryCompressionAgent:
             Summary text
         """
         try:
+            # Create a fresh provider instance to avoid inheriting context from other agents
+            provider_info = self.provider_manager.get_provider(self.provider_id)
+            config = provider_info["config_class"]()
+            fresh_provider = provider_info["class"](config)
+            await fresh_provider.initialize()
 
             formatted_messages = compression_manager.format_messages_for_summary(messages)
             summary_instructions = "Please summarize the following conversation:"
@@ -154,8 +159,8 @@ class MemoryCompressionAgent:
             ]
             
             
-            # Use the compression agent to create summary
-            response = await self.provider.send_chat(
+            # Use the fresh provider to create summary
+            response = await fresh_provider.send_chat(
                 context=message,
                 model=self.model,
                 instructions=self.system_prompt,
@@ -163,7 +168,10 @@ class MemoryCompressionAgent:
                 model_settings=self.model_settings
             )
             
-            return response.strip()
+            # Clean up the fresh provider
+            await fresh_provider.cleanup()
+            
+            return clean_response_for_memory(response.strip())
             
         except Exception as e:
             logger.error(f"Error creating summary: {e}")
