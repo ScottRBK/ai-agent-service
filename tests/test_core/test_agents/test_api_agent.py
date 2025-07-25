@@ -42,7 +42,7 @@ class TestAPIAgentInitialization:
         assert agent.requested_model == "gpt-4"
         assert agent.requested_model_settings == {"temperature": 0.8}
     
-    @patch('app.core.agents.api_agent.AgentToolManager')
+    @patch('app.core.agents.base_agent.AgentToolManager')
     def test_get_provider_from_config(self, mock_tool_manager):
         """Test getting provider from agent configuration."""
         # Mock tool manager config
@@ -55,7 +55,7 @@ class TestAPIAgentInitialization:
         
         assert provider == "test_provider"
     
-    @patch('app.core.agents.api_agent.AgentToolManager')
+    @patch('app.core.agents.base_agent.AgentToolManager')
     def test_get_provider_from_config_default(self, mock_tool_manager):
         """Test getting default provider when not specified in config."""
         # Mock tool manager config without provider
@@ -106,7 +106,7 @@ class TestAPIAgentMemoryManagement:
         
         assert history == expected_history
         mock_memory.get_memories.assert_called_once_with(
-            "default_user", session_id="default_session", agent_id="test_agent", order_direction="asc"
+            "default_user", "default_session", "test_agent", order_direction="asc"
         )
         mock_memory.get_session_summary.assert_called_once_with(
             "default_user", "default_session", "test_agent"
@@ -204,9 +204,9 @@ class TestAPIAgentEdgeCases:
         mock_memory.get_memories.side_effect = Exception("Memory error")
         agent.memory_resource = mock_memory
         
-        # Should propagate memory errors (actual behavior)
-        with pytest.raises(Exception, match="Memory error"):
-            await agent.get_conversation_history()
+        # BaseAgent now catches and logs errors, returning empty list
+        history = await agent.get_conversation_history()
+        assert history == []
         
         # Test save_memory with error
         mock_memory.store_memory.side_effect = Exception("Store error")
@@ -361,7 +361,7 @@ async def test_chat_stream_saves_memory(agent, mock_provider):
     
     with patch.object(agent, 'get_conversation_history', return_value=[]):
         with patch.object(agent, 'save_memory') as mock_save:
-            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+            with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_class:
                 mock_compression_agent = AsyncMock()
                 mock_compression_class.return_value = mock_compression_agent
                 
@@ -446,7 +446,7 @@ async def test_chat_stream_with_memory_compression(agent, mock_provider):
     
     with patch.object(agent, 'get_conversation_history', return_value=[]):
         with patch.object(agent, 'save_memory'):
-            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+            with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_class:
                 mock_compression_agent = AsyncMock()
                 mock_compression_class.return_value = mock_compression_agent
                 
@@ -476,7 +476,7 @@ async def test_chat_stream_without_memory_compression(agent, mock_provider):
     
     with patch.object(agent, 'get_conversation_history', return_value=[]):
         with patch.object(agent, 'save_memory'):
-            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+            with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_class:
                 # Act
                 async for _ in agent.chat_stream("Hi"):
                     break
@@ -530,7 +530,7 @@ async def test_chat_stream_cleans_response_for_memory(agent, mock_provider):
     
     with patch.object(agent, 'get_conversation_history', return_value=[]):
         with patch.object(agent, 'save_memory') as mock_save:
-            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+            with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_class:
                 # Create a mock instance with a mock compress_conversation method
                 mock_instance = AsyncMock()
                 mock_instance.initialized = True  # Set initialized to True to skip initialization
@@ -565,7 +565,7 @@ async def test_chat_stream_empty_response(agent, mock_provider):
     
     with patch.object(agent, 'get_conversation_history', return_value=[]):
         with patch.object(agent, 'save_memory') as mock_save:
-            with patch('app.core.agents.api_agent.MemoryCompressionAgent') as mock_compression_class:
+            with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_class:
                 # Create a mock instance with a mock compress_conversation method
                 mock_instance = AsyncMock()
                 mock_instance.initialized = True  # Set initialized to True to skip initialization

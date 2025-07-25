@@ -943,9 +943,9 @@ class TestExecuteToolCalls:
         """Test executing a single tool call"""
         # Arrange
         context = []
-        tool_calls = [
-            Mock(name="test_tool", arguments='{"param": "value"}', call_id="call_123")
-        ]
+        tool_call = Mock(arguments='{"param": "value"}', call_id="call_123")
+        tool_call.name = "test_tool"
+        tool_calls = [tool_call]
         agent_id = "test_agent"
         mock_provider.execute_tool_call = AsyncMock(return_value="tool_result")
         
@@ -965,10 +965,11 @@ class TestExecuteToolCalls:
         """Test executing multiple tool calls"""
         # Arrange
         context = []
-        tool_calls = [
-            Mock(name="tool1", arguments='{"param1": "value1"}', call_id="call_1"),
-            Mock(name="tool2", arguments='{"param2": "value2"}', call_id="call_2")
-        ]
+        tool_call1 = Mock(arguments='{"param1": "value1"}', call_id="call_1")
+        tool_call1.name = "tool1"
+        tool_call2 = Mock(arguments='{"param2": "value2"}', call_id="call_2")
+        tool_call2.name = "tool2"
+        tool_calls = [tool_call1, tool_call2]
         agent_id = "test_agent"
         mock_provider.execute_tool_call = AsyncMock(side_effect=["result1", "result2"])
         
@@ -988,9 +989,9 @@ class TestExecuteToolCalls:
         """Test handling invalid JSON in tool arguments"""
         # Arrange
         context = []
-        tool_calls = [
-            Mock(name="test_tool", arguments='invalid json', call_id="call_123")
-        ]
+        tool_call = Mock(arguments='invalid json', call_id="call_123")
+        tool_call.name = "test_tool"
+        tool_calls = [tool_call]
         agent_id = "test_agent"
         
         # Act
@@ -1008,9 +1009,9 @@ class TestExecuteToolCalls:
         """Test handling tool execution failures"""
         # Arrange
         context = []
-        tool_calls = [
-            Mock(name="failing_tool", arguments='{"param": "value"}', call_id="call_123")
-        ]
+        tool_call = Mock(arguments='{"param": "value"}', call_id="call_123")
+        tool_call.name = "failing_tool"
+        tool_calls = [tool_call]
         agent_id = "test_agent"
         mock_provider.execute_tool_call = AsyncMock(side_effect=Exception("Tool failed"))
         

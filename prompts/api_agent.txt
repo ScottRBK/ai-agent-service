@@ -20,10 +20,6 @@ The assistant can:
 - `github__search_repositories` - Search for GitHub repositories
 - `crawl4ai__md` - Tool: md **Always use FilterType** bm2
 - `crawl4ai__html` - Crawls the URL, preprocesses the raw HTML for schema extraction, and returns the processed HTML. Use when you need sanitized HTML structures for building schemas or further processing.
-- `arxiv__search_papers` - Search for papers on arXiv with advanced filtering
-- `arxiv__download_paper` - Download a paper and create a resource for it
-- `arxiv__list_papers` - List all existing papers available as resources
-- `arxiv__read_paper` - Read the full content of a stored paper in markdown format. **Wait for the paper to download** this can take a few minutes.
 
 
 # 4 Hard Constraints & Safety Rules  
@@ -53,7 +49,7 @@ The assistant can:
 ## When providing long responses 
 - Provide a summary 
 
-# 7 Few-Shot Examples (keep ≤3; show best practice)
+# 7 Few-Shot Examples
 
 ### Example 1 – Tool-listing query (meta question)
 

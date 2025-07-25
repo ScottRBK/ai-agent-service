@@ -4,16 +4,13 @@ It acts as a specialized agent for creating summaries and managing compression l
 """
 
 from typing import List, Dict, Any, Optional
-from app.core.providers.manager import ProviderManager
-from app.core.agents.prompt_manager import PromptManager
+from app.core.agents.base_agent import BaseAgent
 from app.core.agents.agent_resource_manager import AgentResourceManager
-from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.resources.memory_compression_manager import MemoryCompressionManager
 from app.models.resources.memory import MemorySessionSummary
 from app.utils.logging import logger
-from app.utils.chat_utils import clean_response_for_memory
 
-class MemoryCompressionAgent:
+class MemoryCompressionAgent(BaseAgent):
     """
     Dedicated agent for memory compression tasks.
     Handles conversation summarization and compression logic.
@@ -23,48 +20,8 @@ class MemoryCompressionAgent:
                  agent_id: str = "memory_compression_agent",
                  model: Optional[str] = None,
                  model_settings: Optional[Dict[str, Any]] = None):
-        self.agent_id = agent_id
-        self.provider_manager = ProviderManager()
-        self.prompt_manager = PromptManager(agent_id)
-        self.tool_manager = AgentToolManager(agent_id)
-        self.provider = None
-        self.initialized = False
-        self.resource_manager = AgentResourceManager(agent_id)
-        
-        # Store model configuration
-        self.requested_model = model
-        self.requested_model_settings = model_settings
-        
-        # Get provider from agent config
-        self.provider_id = self.tool_manager.config.get("provider", "azure_openai_cc")
+        super().__init__(agent_id, "default_user", "default_session", model, model_settings)
     
-    async def initialize(self):
-        """Initialize the compression agent."""
-        if self.initialized:
-            return
-            
-        try:
-            # Get provider
-            provider_info = self.provider_manager.get_provider(self.provider_id)
-            config = provider_info["config_class"]()
-            self.provider = provider_info["class"](config)
-            await self.provider.initialize()
-            
-            # Get system prompt
-            self.system_prompt = self.prompt_manager.get_system_prompt()
-            
-            # Get model and settings from config
-            agent_model, agent_model_settings = self.resource_manager.get_model_config()
-            self.model = self.requested_model or agent_model or self.provider.config.default_model
-            self.model_settings = self.requested_model_settings or agent_model_settings
-            
-            
-            self.initialized = True
-            logger.info(f"Memory Compression Agent {self.agent_id} initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Error during memory compression agent initialization: {e}")
-            raise
     
     async def compress_conversation(self, parent_agent_id: str, 
                                   compression_config: Dict[str, Any],
@@ -171,7 +128,7 @@ class MemoryCompressionAgent:
             # Clean up the fresh provider
             await fresh_provider.cleanup()
             
-            return clean_response_for_memory(response.strip())
+            return self._clean_response_for_memory(response.strip())
             
         except Exception as e:
             logger.error(f"Error creating summary: {e}")

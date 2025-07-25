@@ -3,17 +3,11 @@ CLI Agent implementation using the AgentToolManager framework.
 """
 
 import asyncio
-from typing import Optional
-from app.core.agents.agent_tool_manager import AgentToolManager
-from app.core.providers.manager import ProviderManager
-from app.core.agents.prompt_manager import PromptManager
-from app.core.agents.agent_resource_manager import AgentResourceManager
-from app.core.agents.memory_compression_agent import MemoryCompressionAgent
+from typing import Optional, AsyncGenerator
+from app.core.agents.base_agent import BaseAgent
 from app.utils.logging import logger
-from app.models.resources.memory import MemoryEntry, MemorySessionSummary
-from typing import List, AsyncGenerator
 
-class CLIAgent:
+class CLIAgent(BaseAgent):
     """
     Interactive command-line agent with tool capabilities.
     """
@@ -24,96 +18,12 @@ class CLIAgent:
              session_id: str = "default_session",
              model: Optional[str] = None,
              model_settings: Optional[dict] = None):
-        self.agent_id = agent_id
-        self.provider_id = provider_id
-        self.user_id = user_id
-        self.session_id = session_id
-        self.tool_manager = AgentToolManager(agent_id)
-        self.resource_manager = AgentResourceManager(agent_id)
-        self.provider_manager = ProviderManager()
-        self.prompt_manager = PromptManager(agent_id)
-        self.provider = None
-        self.conversation_history = []
-        self.summary = None
-        self.initialized = False
-        
-        # Store model configuration
-        self.requested_model = model
-        self.requested_model_settings = model_settings
+        self.provider_id = provider_id  # Set before calling super() to avoid AttributeError
+        super().__init__(agent_id, user_id, session_id, model, model_settings)
     
-    async def initialize(self):
-        """Initialize the agent and provider."""
-        if self.initialized:
-            return
-            
-        # Get provider
-        provider_info = self.provider_manager.get_provider(self.provider_id)
-        config = provider_info["config_class"]()
-        self.provider = provider_info["class"](config)
-        await self.provider.initialize()
-        
-        # Verify agent has access to tools
-        self.available_tools = await self.tool_manager.get_available_tools()
-        logger.info(f"Agent {self.agent_id} initialized with {len(self.available_tools)} tools")
-
-        self.system_prompt = self.prompt_manager.get_system_prompt_with_tools(self.available_tools)
-        logger.debug(f"System prompt: {self.system_prompt}")
-
-        # Get model and settings with priority: CLI args > agent config > provider default
-        agent_model, agent_model_settings = self.resource_manager.get_model_config()
-        
-        # Use requested model/settings if provided, otherwise fall back to agent config
-        self.model = self.requested_model or agent_model or self.provider.config.default_model
-        self.model_settings = self.requested_model_settings or agent_model_settings
-        
-        logger.debug(f"Model: {self.model}, Model settings: {self.model_settings}")
-
-        self.memory_resource = await self.resource_manager.get_memory_resource()
-        
-        self.initialized = True
-
-    def _clean_response_for_memory(self, response: str) -> str:
-        """Clean response before storing in memory."""
-        # Remove content between <think> tags
-        import re
-        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
-        
-        # Remove \n characters and replace with actual newlines
-        response = response.replace('\\n', '\n')
-        
-        # Clean up extra whitespace
-        response = response.strip()
-        
-        return response
-
-    async def save_memory(self, role: str, content: str):
-        """Save a memory entry to the memory resource."""
-        if self.memory_resource:
-            memory_entry = MemoryEntry(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                agent_id=self.agent_id,
-                content={"role": role, "content": content}
-            )
-            await self.memory_resource.store_memory(memory_entry)
-        else:
-            logger.warning(f"No memory resource found for agent {self.agent_id}")
-
-    async def load_memory(self):
-        """Load memory from the memory resource."""
-        try:
-            memories: List[MemoryEntry] = await self.memory_resource.get_memories(self.user_id, self.session_id, self.agent_id, order_direction="asc")
-            summary: MemorySessionSummary = await self.memory_resource.get_session_summary(self.user_id, self.session_id, self.agent_id)
-            if summary:
-                conversation_history = [{"role": "system", "content": summary.summary}]
-            else:
-                conversation_history = []
-            conversation_history.extend([{"role": memory.content["role"], "content": memory.content["content"]} for memory in memories])
-            return conversation_history
-        
-        except Exception as e:
-            logger.error(f"client agent - load_memory - Error loading memory for agent {self.agent_id}: {e}")
-            return []
+    def _get_provider_from_config(self) -> str:
+        """Override to use CLI-specific provider_id if provided"""
+        return self.provider_id
         
     async def chat_stream_with_memory(self, user_input: str) -> AsyncGenerator[str, None]:
         """Send a message to the agent and stream the response"""
@@ -136,16 +46,13 @@ class CLIAgent:
 
         clean_response = self._clean_response_for_memory(full_response)
         await self.save_memory("assistant", clean_response)
-        memory_compression_agent = MemoryCompressionAgent()
+        
         compression_config = {
-                    "threshold_tokens": 500,
-                    "recent_messages_to_keep": 4,
-                    "enabled": True
-                    }
-        await memory_compression_agent.compress_conversation(self.agent_id, 
-                                                            compression_config,
-                                                            self.user_id,
-                                                            self.session_id)
+            "threshold_tokens": 500,
+            "recent_messages_to_keep": 4,
+            "enabled": True
+        }
+        await self._trigger_memory_compression(compression_config)
 
     async def chat_with_memory(self, user_input: str) -> str:
         """Send a message to the agent and get response."""
@@ -170,15 +77,11 @@ class CLIAgent:
         await self.save_memory("assistant", clean_response)
 
         compression_config = {
-                    "threshold_tokens": 500,
-                    "recent_messages_to_keep": 4,
-                    "enabled": True
-                    }
-        memory_compression_agent = MemoryCompressionAgent()
-        await memory_compression_agent.compress_conversation(self.agent_id, 
-                                                            compression_config,
-                                                            self.user_id,
-                                                            self.session_id)
+            "threshold_tokens": 500,
+            "recent_messages_to_keep": 4,
+            "enabled": True
+        }
+        await self._trigger_memory_compression(compression_config)
        
         return response
     

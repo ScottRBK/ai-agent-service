@@ -28,6 +28,36 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 - **Response Processing** - Automatic response cleaning and formatting for memory storage
 - **OpenAI-Compatible API** - Full OpenAI protocol compliance with streaming support
 
+## 🏗️ Agent Architecture
+
+The service uses a unified agent architecture built around inheritance:
+
+### BaseAgent Foundation
+- **BaseAgent** - Common functionality shared by all agents
+- **Optional Memory** - Memory features activate only when configured in `agent_config.json`
+- **Consistent Interface** - All agents inherit the same core methods and behaviors
+- **Error Handling** - Centralized error handling and logging across all agent types
+
+### Agent Inheritance Hierarchy
+```
+BaseAgent (base class)
+├── CLIAgent (interactive command-line interface)
+├── APIAgent (web API optimized)
+└── MemoryCompressionAgent (conversation summarization)
+```
+
+### Key Benefits
+- **Code Reuse** - ~135 lines of duplicate code eliminated
+- **Consistency** - Uniform memory handling and error management
+- **Configuration-Driven** - Memory behavior controlled via agent configuration
+- **Maintainability** - Single source of truth for common functionality
+
+### Memory Behavior
+- Memory functionality is **optional** and **configuration-driven**
+- Agents without `"memory"` in their `resources` array operate without persistence
+- Agents with memory support automatic conversation history and compression
+- Error handling ensures graceful fallback to empty history when memory issues occur
+
 ## 🚀 Quick Start
 
 ### Using Docker (Recommended)
@@ -78,12 +108,13 @@ ai-agent-service/
 │   │       └── openai_compatible.py   # OpenAI-compatible API with streaming
 │   ├── core/
 │   │   ├── agents/
+│   │   │   ├── base_agent.py            # Base agent class with common functionality
 │   │   │   ├── agent_tool_manager.py    # Agent tool filtering with fastmcp
 │   │   │   ├── agent_resource_manager.py # Agent resource management
 │   │   │   ├── prompt_manager.py        # System prompt management
-│   │   │   ├── cli_agent.py             # CLI agent implementation
-│   │   │   ├── api_agent.py             # API agent implementation with streaming
-│   │   │   └── memory_compression_agent.py # Memory compression agent
+│   │   │   ├── cli_agent.py             # CLI agent implementation (inherits from BaseAgent)
+│   │   │   ├── api_agent.py             # API agent implementation with streaming (inherits from BaseAgent)
+│   │   │   └── memory_compression_agent.py # Memory compression agent (inherits from BaseAgent)
 │   │   ├── providers/
 │   │   │   ├── base.py                  # Base provider interface
 │   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API) with streaming
@@ -790,7 +821,8 @@ Agents are configured in `agent_config.json` (or `agent_config.example.json` for
 ## 🧪 Testing
 
 ### Test Coverage
-- **275+ tests** including unit and integration tests
+- **285+ tests** including unit and integration tests with BaseAgent architecture validation
+- **BaseAgent architecture** - Memory behavior validation across agent inheritance hierarchy
 - **Agent tool filtering** - Comprehensive permission testing
 - **Resource management** - Memory resource CRUD operations and lifecycle
 - **Memory compression management** - Comprehensive testing of compression logic, token counting, and conversation splitting
@@ -861,6 +893,46 @@ pytest tests/test_api/test_openai_compatible_integration.py -k "streaming"
 2. Define your Pydantic models in `app/models/`
 3. Include the router in `app/main.py`
 
+### Using Agents with BaseAgent Architecture
+
+```python
+from app.core.agents.api_agent import APIAgent
+from app.core.agents.cli_agent import CLIAgent
+
+# Create an API agent (inherits from BaseAgent)
+api_agent = APIAgent("research_agent", user_id="user123", session_id="session456")
+await api_agent.initialize()
+
+# Send message with automatic memory handling
+response = await api_agent.chat("What's the current time in Tokyo?")
+
+# Create a CLI agent (inherits from BaseAgent) 
+cli_agent = CLIAgent("cli_agent", provider_id="azure_openai_cc")
+await cli_agent.initialize()
+
+# Interactive mode with memory support
+await cli_agent.interactive_mode()
+```
+
+### BaseAgent Common Interface
+
+All agents inherit these core methods from `BaseAgent`:
+
+```python
+# Memory operations (work only if memory is configured)
+await agent.save_memory("user", "Hello")
+history = await agent.load_memory()  # Returns [] if no memory configured
+
+# Memory compression (automatic when thresholds are exceeded)
+await agent._trigger_memory_compression(config)
+
+# Response cleaning for memory storage
+clean_text = agent._clean_response_for_memory(response)
+
+# Initialization with provider and tool setup
+await agent.initialize()
+```
+
 ### Using Agents with Prompt Management
 
 ```python
@@ -883,7 +955,6 @@ response = await provider.send_chat(
     model="gpt-4",
     instructions=system_prompt,
     agent_id="research_agent"
-)
 ```
 
 ### Creating Custom Agents
