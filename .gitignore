@@ -140,6 +140,7 @@ dmypy.json
 .cursorrules
 .cursor/
 CLAUDE.md
+.claude/
 
 # OS
 .DS_Store

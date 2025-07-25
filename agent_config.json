@@ -57,7 +57,7 @@
         "allowed_mcp_tools": null
       },
       "github": {
-        "allowed_mcp_tools": null
+        "allowed_mcp_tools": ["get_me", "search_repositories", "search_code"]
       }
     },
     "provider": "ollama",

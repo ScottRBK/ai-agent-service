@@ -837,6 +837,471 @@ class TestPerformanceAndConcurrency:
         assert mock_azure_client.responses.create.call_count == 3
 
 # ============================================================================
+# New Private Method Tests (following Ollama refactoring pattern)
+# ============================================================================
+
+class TestPrepareRequestParams:
+    """Tests for _prepare_request_params method"""
+    
+    def test_prepare_request_params_with_all_parameters(self, mock_provider):
+        """Test request parameter preparation with all parameters provided"""
+        # Arrange
+        model = "gpt-4.1-nano"
+        instructions = "You are a helpful assistant"
+        context = [{"role": "user", "content": "Hello"}]
+        available_tools = [{"type": "function", "name": "test_tool"}]
+        model_settings = {"temperature": 0.7, "max_tokens": 100}
+        
+        # Act
+        result = mock_provider._prepare_request_params(model, instructions, context, available_tools, model_settings)
+        
+        # Assert
+        assert result["model"] == model
+        assert result["instructions"] == instructions
+        assert result["input"] == context
+        assert result["tools"] == available_tools
+        assert result["temperature"] == 0.7
+        assert result["max_tokens"] == 100
+
+    def test_prepare_request_params_with_model_settings_none(self, mock_provider):
+        """Test request parameter preparation with None model_settings"""
+        # Arrange
+        model = "gpt-4.1-nano"
+        instructions = "You are a helpful assistant"
+        context = [{"role": "user", "content": "Hello"}]
+        available_tools = []
+        
+        # Act
+        result = mock_provider._prepare_request_params(model, instructions, context, available_tools, None)
+        
+        # Assert
+        assert result["model"] == model
+        assert result["instructions"] == instructions
+        assert result["input"] == context
+        assert result["tools"] == available_tools
+        assert "temperature" not in result
+        assert "max_tokens" not in result
+
+    def test_prepare_request_params_with_empty_model_settings(self, mock_provider):
+        """Test request parameter preparation with empty model_settings dict"""
+        # Arrange
+        model = "gpt-4.1-nano"
+        instructions = "You are a helpful assistant"
+        context = [{"role": "user", "content": "Hello"}]
+        available_tools = []
+        model_settings = {}
+        
+        # Act
+        result = mock_provider._prepare_request_params(model, instructions, context, available_tools, model_settings)
+        
+        # Assert
+        assert result["model"] == model
+        assert result["instructions"] == instructions
+        assert result["input"] == context
+        assert result["tools"] == available_tools
+        assert "temperature" not in result
+
+    def test_prepare_request_params_with_empty_context(self, mock_provider):
+        """Test request parameter preparation with empty context"""
+        # Arrange
+        model = "gpt-4.1-nano"
+        instructions = "You are a helpful assistant"
+        context = []
+        available_tools = []
+        
+        # Act
+        result = mock_provider._prepare_request_params(model, instructions, context, available_tools, None)
+        
+        # Assert
+        assert result["model"] == model
+        assert result["instructions"] == instructions
+        assert result["input"] == []
+        assert result["tools"] == []
+
+    def test_prepare_request_params_with_empty_instructions(self, mock_provider):
+        """Test request parameter preparation with empty instructions"""
+        # Arrange
+        model = "gpt-4.1-nano"
+        instructions = ""
+        context = [{"role": "user", "content": "Hello"}]
+        available_tools = []
+        
+        # Act
+        result = mock_provider._prepare_request_params(model, instructions, context, available_tools, None)
+        
+        # Assert
+        assert result["model"] == model
+        assert result["instructions"] == ""
+        assert result["input"] == context
+        assert result["tools"] == []
+
+class TestExecuteToolCalls:
+    """Tests for _execute_tool_calls method"""
+    
+    @pytest.mark.asyncio
+    async def test_execute_tool_calls_single_tool(self, mock_provider):
+        """Test executing a single tool call"""
+        # Arrange
+        context = []
+        tool_calls = [
+            Mock(name="test_tool", arguments='{"param": "value"}', call_id="call_123")
+        ]
+        agent_id = "test_agent"
+        mock_provider.execute_tool_call = AsyncMock(return_value="tool_result")
+        
+        # Act
+        tool_count = await mock_provider._execute_tool_calls(context, tool_calls, agent_id)
+        
+        # Assert
+        assert tool_count == 1
+        assert len(context) == 1
+        assert context[0]["type"] == "function_call_output"
+        assert context[0]["call_id"] == "call_123"
+        assert context[0]["output"] == "tool_result"
+        mock_provider.execute_tool_call.assert_called_once_with("test_tool", {"param": "value"}, agent_id)
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_calls_multiple_tools(self, mock_provider):
+        """Test executing multiple tool calls"""
+        # Arrange
+        context = []
+        tool_calls = [
+            Mock(name="tool1", arguments='{"param1": "value1"}', call_id="call_1"),
+            Mock(name="tool2", arguments='{"param2": "value2"}', call_id="call_2")
+        ]
+        agent_id = "test_agent"
+        mock_provider.execute_tool_call = AsyncMock(side_effect=["result1", "result2"])
+        
+        # Act
+        tool_count = await mock_provider._execute_tool_calls(context, tool_calls, agent_id)
+        
+        # Assert
+        assert tool_count == 2
+        assert len(context) == 2
+        assert context[0]["call_id"] == "call_1"
+        assert context[0]["output"] == "result1"
+        assert context[1]["call_id"] == "call_2"
+        assert context[1]["output"] == "result2"
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_calls_with_invalid_json(self, mock_provider):
+        """Test handling invalid JSON in tool arguments"""
+        # Arrange
+        context = []
+        tool_calls = [
+            Mock(name="test_tool", arguments='invalid json', call_id="call_123")
+        ]
+        agent_id = "test_agent"
+        
+        # Act
+        tool_count = await mock_provider._execute_tool_calls(context, tool_calls, agent_id)
+        
+        # Assert
+        assert tool_count == 0
+        assert len(context) == 1
+        assert context[0]["type"] == "function_call_output"
+        assert context[0]["call_id"] == "call_123"
+        assert "Error: Invalid tool arguments format" in context[0]["output"]
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_calls_with_execution_failure(self, mock_provider):
+        """Test handling tool execution failures"""
+        # Arrange
+        context = []
+        tool_calls = [
+            Mock(name="failing_tool", arguments='{"param": "value"}', call_id="call_123")
+        ]
+        agent_id = "test_agent"
+        mock_provider.execute_tool_call = AsyncMock(side_effect=Exception("Tool failed"))
+        
+        # Act
+        tool_count = await mock_provider._execute_tool_calls(context, tool_calls, agent_id)
+        
+        # Assert
+        assert tool_count == 0
+        assert len(context) == 1
+        assert context[0]["type"] == "function_call_output"
+        assert context[0]["call_id"] == "call_123"
+        assert "Error: Tool execution failed" in context[0]["output"]
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_calls_empty_list(self, mock_provider):
+        """Test executing empty tool calls list"""
+        # Arrange
+        context = []
+        tool_calls = []
+        agent_id = "test_agent"
+        
+        # Act
+        tool_count = await mock_provider._execute_tool_calls(context, tool_calls, agent_id)
+        
+        # Assert
+        assert tool_count == 0
+        assert len(context) == 0
+
+class TestProcessStreamingResponse:
+    """Tests for _process_streaming_response method"""
+    
+    @pytest.mark.asyncio
+    async def test_process_streaming_response_content_only(self, mock_provider):
+        """Test processing streaming response with content only"""
+        # Arrange
+        async def mock_response():
+            yield Mock(type="response.output_text.delta", delta="Hello")
+            yield Mock(type="response.output_text.delta", delta=" world")
+            yield Mock(type="response.completed", response=Mock(
+                output=[Mock(type="message", content=[Mock(text="Hello world")])]
+            ))
+        
+        # Act
+        results = []
+        async for chunk_type, content, tool_calls in mock_provider._process_streaming_response(mock_response()):
+            results.append((chunk_type, content, tool_calls))
+        
+        # Assert
+        assert len(results) == 3
+        assert results[0] == ("content", "Hello", [])
+        assert results[1] == ("content", " world", [])
+        assert results[2] == ("final", "Hello world", [])
+
+    @pytest.mark.asyncio
+    async def test_process_streaming_response_with_tool_calls(self, mock_provider):
+        """Test processing streaming response with tool calls"""
+        # Arrange
+        mock_tool_call = Mock(type="function_call", name="test_tool", arguments='{"param": "value"}', call_id="call_123")
+        async def mock_response():
+            yield Mock(type="response.output_text.delta", delta="I'll help you")
+            yield Mock(type="response.completed", response=Mock(
+                output=[mock_tool_call]
+            ))
+        
+        # Act
+        results = []
+        async for chunk_type, content, tool_calls in mock_provider._process_streaming_response(mock_response()):
+            results.append((chunk_type, content, tool_calls))
+        
+        # Assert
+        assert len(results) == 2
+        assert results[0] == ("content", "I'll help you", [])
+        assert results[1][0] == "final"
+        assert results[1][1] == ""
+        assert len(results[1][2]) == 1
+        assert results[1][2][0] == mock_tool_call
+
+    @pytest.mark.asyncio
+    async def test_process_streaming_response_mixed_content_and_tools(self, mock_provider):
+        """Test processing streaming response with both content and tool calls"""
+        # Arrange
+        mock_tool_call = Mock(type="function_call", name="test_tool", arguments='{"param": "value"}', call_id="call_123")
+        async def mock_response():
+            yield Mock(type="response.output_text.delta", delta="Let me help")
+            yield Mock(type="response.completed", response=Mock(
+                output=[
+                    Mock(type="message", content=[Mock(text="Let me help you")]),
+                    mock_tool_call
+                ]
+            ))
+        
+        # Act
+        results = []
+        async for chunk_type, content, tool_calls in mock_provider._process_streaming_response(mock_response()):
+            results.append((chunk_type, content, tool_calls))
+        
+        # Assert
+        assert len(results) == 2
+        assert results[0] == ("content", "Let me help", [])
+        assert results[1] == ("final", "Let me help you", [mock_tool_call])
+
+    @pytest.mark.asyncio
+    async def test_process_streaming_response_with_error(self, mock_provider):
+        """Test handling errors during streaming"""
+        # Arrange
+        async def mock_response():
+            yield Mock(type="response.output_text.delta", delta="Hello")
+            raise Exception("Streaming error")
+        
+        # Act
+        results = []
+        async for chunk_type, content, tool_calls in mock_provider._process_streaming_response(mock_response()):
+            results.append((chunk_type, content, tool_calls))
+        
+        # Assert
+        assert len(results) == 2
+        assert results[0] == ("content", "Hello", [])
+        assert results[1][0] == "error"
+        assert "Error: Streaming interrupted" in results[1][1]
+
+    @pytest.mark.asyncio
+    async def test_process_streaming_response_no_completed_event(self, mock_provider):
+        """Test handling when no completed event is received"""
+        # Arrange
+        async def mock_response():
+            yield Mock(type="response.output_text.delta", delta="Hello")
+            # No completed event
+        
+        # Act
+        results = []
+        async for chunk_type, content, tool_calls in mock_provider._process_streaming_response(mock_response()):
+            results.append((chunk_type, content, tool_calls))
+        
+        # Assert
+        assert len(results) == 2
+        assert results[0] == ("content", "Hello", [])
+        assert results[1] == ("final", "", [])
+
+class TestHandleToolCallsStreaming:
+    """Tests for _handle_tool_calls_streaming method"""
+    
+    @pytest.mark.asyncio
+    async def test_handle_tool_calls_streaming_single_iteration(self, mock_provider, mock_azure_client):
+        """Test single iteration without tool calls"""
+        # Arrange
+        mock_provider.client = mock_azure_client
+        context = [{"role": "user", "content": "Hello"}]
+        model = "gpt-4.1-nano"
+        available_tools = []
+        agent_id = "test_agent"
+        
+        async def mock_response():
+            yield Mock(type="response.output_text.delta", delta="Hello")
+            yield Mock(type="response.completed", response=Mock(output=[
+                Mock(type="message", content=[Mock(text="Hello world")])
+            ]))
+        
+        mock_azure_client.responses.create.return_value = mock_response()
+        mock_provider.record_successful_call = AsyncMock()
+        
+        # Act
+        results = []
+        async for content in mock_provider._handle_tool_calls_streaming(context, model, available_tools, agent_id):
+            results.append(content)
+        
+        # Assert
+        assert "Hello" in results
+        mock_azure_client.responses.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_tool_calls_streaming_with_tool_calls(self, mock_provider, mock_azure_client):
+        """Test streaming with tool calls"""
+        # Arrange
+        mock_provider.client = mock_azure_client
+        mock_provider.execute_tool_call = AsyncMock(return_value="tool_result")
+        mock_provider.record_successful_call = AsyncMock()
+        
+        context = [{"role": "user", "content": "Use a tool"}]
+        model = "gpt-4.1-nano"
+        available_tools = [{"type": "function", "name": "test_tool"}]
+        agent_id = "test_agent"
+        
+        # First response with tool call
+        async def mock_first_response():
+            yield Mock(type="response.output_text.delta", delta="I'll help")
+            yield Mock(type="response.completed", response=Mock(output=[
+                Mock(type="function_call", name="test_tool", arguments='{"param": "value"}', call_id="call_123")
+            ]))
+        
+        # Second response after tool execution
+        async def mock_second_response():
+            yield Mock(type="response.output_text.delta", delta="Done")
+            yield Mock(type="response.completed", response=Mock(output=[]))
+        
+        mock_azure_client.responses.create.side_effect = [mock_first_response(), mock_second_response()]
+        
+        # Act
+        results = []
+        async for content in mock_provider._handle_tool_calls_streaming(context, model, available_tools, agent_id):
+            results.append(content)
+        
+        # Assert
+        assert "I'll help" in results
+        assert "Done" in results
+        mock_provider.execute_tool_call.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_tool_calls_streaming_max_iterations(self, mock_provider, mock_azure_client):
+        """Test max tool iterations handling"""
+        # Arrange
+        mock_provider.client = mock_azure_client
+        mock_provider.max_tool_iterations = 1
+        mock_provider.execute_tool_call = AsyncMock(return_value="tool_result")
+        mock_provider.record_successful_call = AsyncMock()
+        
+        context = [{"role": "user", "content": "Use tools"}]
+        model = "gpt-4.1-nano"
+        available_tools = [{"type": "function", "name": "test_tool"}]
+        agent_id = "test_agent"
+        
+        # Always return tool calls to trigger max iterations
+        async def mock_response_with_tools():
+            yield Mock(type="response.output_text.delta", delta="Processing")
+            yield Mock(type="response.completed", response=Mock(output=[
+                Mock(type="function_call", name="test_tool", arguments='{"param": "value"}', call_id="call_123")
+            ]))
+        
+        mock_azure_client.responses.create.return_value = mock_response_with_tools()
+        
+        # Act
+        results = []
+        async for content in mock_provider._handle_tool_calls_streaming(context, model, available_tools, agent_id):
+            results.append(content)
+        
+        # Assert
+        assert any("Warning: Maximum tool iterations" in result for result in results)
+
+    @pytest.mark.asyncio
+    async def test_handle_tool_calls_streaming_with_instructions(self, mock_provider, mock_azure_client):
+        """Test instruction extraction from context"""
+        # Arrange
+        mock_provider.client = mock_azure_client
+        mock_provider.record_successful_call = AsyncMock()
+        
+        context = [
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": "Hello"}
+        ]
+        model = "gpt-4.1-nano"
+        available_tools = []
+        agent_id = "test_agent"
+        
+        async def mock_response():
+            yield Mock(type="response.output_text.delta", delta="Hello")
+            yield Mock(type="response.completed", response=Mock(output=[]))
+        
+        mock_azure_client.responses.create.return_value = mock_response()
+        
+        # Act
+        results = []
+        async for content in mock_provider._handle_tool_calls_streaming(context, model, available_tools, agent_id):
+            results.append(content)
+        
+        # Assert
+        assert "Hello" in results
+        # Verify that instructions were extracted and passed correctly
+        call_args = mock_azure_client.responses.create.call_args[1]
+        assert call_args["instructions"] == "You are a helpful assistant"
+
+    @pytest.mark.asyncio
+    async def test_handle_tool_calls_streaming_api_error(self, mock_provider, mock_azure_client):
+        """Test handling API errors"""
+        # Arrange
+        mock_provider.client = mock_azure_client
+        context = [{"role": "user", "content": "Hello"}]
+        model = "gpt-4.1-nano"
+        available_tools = []
+        agent_id = "test_agent"
+        
+        mock_azure_client.responses.create.side_effect = Exception("API Error")
+        
+        # Act
+        results = []
+        async for content in mock_provider._handle_tool_calls_streaming(context, model, available_tools, agent_id):
+            results.append(content)
+        
+        # Assert
+        assert len(results) == 1
+        assert "Error: Failed to communicate with Azure OpenAI" in results[0]
+
+# ============================================================================
 # Legacy Tests (keeping existing tests)
 # ============================================================================
 
