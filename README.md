@@ -4,59 +4,40 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 
 ## ✨ Features
 
-- **Framework Design** - Complete implementation showing how to build AI agents from the ground up
-- **FastAPI Framework** - Modern, fast web framework with automatic API documentation
-- **AI Agent Capabilities** - Intelligent automation and decision-making
-- **Health Check Endpoints** - Built-in monitoring and status endpoints
-- **Multi-Provider AI Support** - Azure OpenAI, Ollama with unified interface
-- **MCP Integration** - Model Context Protocol for external tools using fastmcp library
-- **Tool Filtering** - Agent-specific permissions and authorization
-- **Prompt Management** - Dynamic system prompts with tool integration
-- **Model Configuration** - Flexible model selection and parameter management
-- **CLI Parameter Overrides** - Runtime model and setting customization
-- **Docker Support** - Multi-stage builds with development and production targets 
-- **Environment Configuration** - Flexible settings with environment variable support
-- **Structured Logging** - Comprehensive logging setup for debugging and monitoring
-- **Type Safety** - Full type hints throughout the codebase
-- **Auto-Generated Docs** - Interactive API documentation with Swagger UI and ReDoc
-- **Hot Reload** - Development mode with automatic code reloading
-- **Resource Management** - Global resource lifecycle management with agent-specific filtering
-- **Memory Persistence** - PostgreSQL-based conversation history with automatic cleanup
-- **Memory Compression** - Intelligent conversation history management with AI-powered summarization
-- **Agent Resource Manager** - Per-agent resource access control and automatic resource creation
-- **Streaming Support** - Real-time response streaming across all providers and API endpoints
-- **Response Processing** - Automatic response cleaning and formatting for memory storage
-- **OpenAI-Compatible API** - Full OpenAI protocol compliance with streaming support
+### 🏗️ **Core Framework**
+* **Framework Design** - Complete implementation showing how to build AI agents from the ground up
+* **FastAPI Framework** - Modern, fast web framework with automatic API documentation
+* **AI Agent Capabilities** - Intelligent automation and decision-making
+* **Health Check Endpoints** - Built-in monitoring and status endpoints
 
-## 🏗️ Agent Architecture
+### 🔌 **AI Integration & Providers**
+* **Multi-Provider AI Support** - Azure OpenAI, Ollama with unified interface
+* **MCP Integration** - Model Context Protocol for external tools using fastmcp library
+* **OpenAI-Compatible API** - Full OpenAI protocol compliance with streaming support
+* **Streaming Support** - Real-time response streaming across all providers and API endpoints
 
-The service uses a unified agent architecture built around inheritance:
+### 🛠️ **Tool & Resource Management**
+* **Tool Filtering** - Agent-specific permissions and authorization
+* **Prompt Management** - Dynamic system prompts with tool integration
+* **Agent Resource Manager** - Per-agent resource access control and automatic resource creation
+* **Resource Management** - Global resource lifecycle management with agent-specific filtering
 
-### BaseAgent Foundation
-- **BaseAgent** - Common functionality shared by all agents
-- **Optional Memory** - Memory features activate only when configured in `agent_config.json`
-- **Consistent Interface** - All agents inherit the same core methods and behaviors
-- **Error Handling** - Centralized error handling and logging across all agent types
+### ⚙️ **Configuration & Development**
+* **Model Configuration** - Flexible model selection and parameter management
+* **CLI Parameter Overrides** - Runtime model and setting customization
+* **Environment Configuration** - Flexible settings with environment variable support
+* **Hot Reload** - Development mode with automatic code reloading
 
-### Agent Inheritance Hierarchy
-```
-BaseAgent (base class)
-├── CLIAgent (interactive command-line interface)
-├── APIAgent (web API optimized)
-└── MemoryCompressionAgent (conversation summarization)
-```
+### 🧠 **Memory & Persistence**
+* **Memory Persistence** - PostgreSQL-based conversation history with automatic cleanup
+* **Memory Compression** - Intelligent conversation history management with AI-powered summarization
+* **Response Processing** - Automatic response cleaning and formatting for memory storage
 
-### Key Benefits
-- **Code Reuse** - ~135 lines of duplicate code eliminated
-- **Consistency** - Uniform memory handling and error management
-- **Configuration-Driven** - Memory behavior controlled via agent configuration
-- **Maintainability** - Single source of truth for common functionality
-
-### Memory Behavior
-- Memory functionality is **optional** and **configuration-driven**
-- Agents without `"memory"` in their `resources` array operate without persistence
-- Agents with memory support automatic conversation history and compression
-- Error handling ensures graceful fallback to empty history when memory issues occur
+### 🚀 **Production & Quality**
+* **Docker Support** - Multi-stage builds with development and production targets
+* **Structured Logging** - Comprehensive logging setup for debugging and monitoring
+* **Type Safety** - Full type hints throughout the codebase
+* **Auto-Generated Docs** - Interactive API documentation with Swagger UI and ReDoc
 
 ## 🚀 Quick Start
 
