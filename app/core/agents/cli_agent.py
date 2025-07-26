@@ -13,17 +13,19 @@ class CLIAgent(BaseAgent):
     """
     
     def __init__(self, agent_id: str = "cli_agent", 
-             provider_id: str = "azure_openai_cc", 
+             provider_id: Optional[str] = None, 
              user_id: str = "default_user", 
              session_id: str = "default_session",
              model: Optional[str] = None,
              model_settings: Optional[dict] = None):
-        self.provider_id = provider_id  # Set before calling super() to avoid AttributeError
+        self.provider_id = provider_id
         super().__init__(agent_id, user_id, session_id, model, model_settings)
     
     def _get_provider_from_config(self) -> str:
         """Override to use CLI-specific provider_id if provided"""
-        return self.provider_id
+        if self.provider_id is not None:
+            return self.provider_id
+        return super()._get_provider_from_config()
         
     async def chat_stream_with_memory(self, user_input: str) -> AsyncGenerator[str, None]:
         """Send a message to the agent and stream the response"""

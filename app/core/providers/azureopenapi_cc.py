@@ -34,11 +34,11 @@ class AzureOpenAIProviderCC(BaseProvider):
                 azure_ad_token=self.config.api_key
             )
             
-            logger.info(f"AzureAI provider - initialize - {self.config.name} initialized successfully")
+            logger.info(f"AzureOpenAIProviderCC provider - initialize - {self.config.name} initialized successfully")
 
         except Exception as e:
             logger.warning(f"""Error during initialization 
-                            AzureOpenAI Provider - initialize - {self.config.name}: {e}""")
+                            AzureOpenAIProviderCC Provider - initialize - {self.config.name}: {e}""")
             
     async def health_check(self) -> HealthStatus:
         """Check the health of the provider."""
@@ -49,11 +49,11 @@ class AzureOpenAIProviderCC(BaseProvider):
                 max_tokens=1
             )
             health = HealthStatus(status="healthy", timestamp=datetime.now(), service=self.config.name, version=self.version)
-            logger.debug(f"AzureOpenAI Provider {self.config.name} - health_check - health: {health}")
+            logger.debug(f"AzureOpenAIProviderCC Provider {self.config.name} - health_check - health: {health}")
             return health
         except Exception as e:
             health = HealthStatus(status="unhealthy", timestamp=datetime.now(), service=self.config.name, version=self.version, error_details=str(e))
-            logger.debug(f"AzureOpenAI Provider {self.config.name} - health_check - health: {health}")
+            logger.debug(f"AzureOpenAIProviderCC Provider {self.config.name} - health_check - health: {health}")
             return health
 
     async def cleanup(self) -> None:
@@ -61,10 +61,10 @@ class AzureOpenAIProviderCC(BaseProvider):
         try:
             if self.client:
                 self.client = None
-                logger.debug(f"AzureOpenAI Provider {self.config.name} cleaned up")
+                logger.debug(f"AzureOpenAIProviderCC Provider {self.config.name} cleaned up")
         except Exception as e:
             logger.warning(f"""Error during cleanup 
-                            AzureOpenAI Provider {self.config.name} cleanup: {e}""")
+                            AzureOpenAIProviderCC Provider {self.config.name} cleanup: {e}""")
 
     async def get_model_list(self) -> list[str]:
         """Get a list of available models."""
