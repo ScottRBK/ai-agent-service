@@ -171,7 +171,6 @@ class OllamaProvider(BaseProvider):
         
         async for content in self._handle_tool_calls_streaming(messages, model, available_tools, agent_id, model_settings):
             yield content
-        
 
     async def send_chat(self, context: list, model: str, 
                         instructions: str, 
@@ -179,16 +178,9 @@ class OllamaProvider(BaseProvider):
                         agent_id: str = None,
                         model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
-        logger.debug(f"OllamaProvider - send_chat - model: {model}")
-        logger.debug(f"OllamaProvider - send_chat - instructions: {instructions}")
-        logger.debug(f"OllamaProvider - send_chat - context: {context}")
-        logger.debug(f"OllamaProvider - send_chat - tools: {tools}")
-        logger.debug(f"OllamaProvider - send_chat - agent_id: {agent_id}")
-        logger.debug(f"OllamaProvider - send_chat - self.client: {self.config.base_url}")
 
         messages = self._prepare_messages(instructions, context)
         available_tools = await self.get_available_tools(agent_id, tools)
-        logger.debug(f"OllamaProvider - send_chat - available tools: {len(available_tools) if available_tools else 0}")
         
         request_params = {
             "model": model,
@@ -197,24 +189,17 @@ class OllamaProvider(BaseProvider):
         }
         if model_settings:
             request_params["options"] = model_settings
+
         logger.info(f"OllamaProvider - send_chat - sending request to ollama")
         response: ChatResponse = await self.client.chat(**request_params)
-        logger.info(f"""OllamaProvider - send_chat - response from ollama received, 
-                        input tokens: {response.prompt_eval_count}, 
-                        output tokens: {response.eval_count},
-                        total tokens: {response.eval_count + response.prompt_eval_count},
-                        load duration: {response.load_duration},
-                        total duration: {response.total_duration}""")
+
         await self.record_successful_call()
-        logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
-                        Total: {self.total_requests}
-                        /n messages: {messages}
-                        /n response: {response.message.content}""")
+
         total_tool_iterations = 0
         for _ in range(self.max_tool_iterations):
             if response.message.tool_calls:
+                
                 messages.append(response.message)
-                logger.debug(f"OllamaProvider - send_chat - tool_calls: {response.message.tool_calls}")
 
                 tool_count = await self._execute_tool_calls(messages, response.message.tool_calls, agent_id)
                 total_tool_iterations += tool_count
@@ -223,10 +208,6 @@ class OllamaProvider(BaseProvider):
                 response: ChatResponse = await self.client.chat(**request_params)
 
                 await self.record_successful_call()
-                logger.debug(f"""OllamaProvider - send_chat - Success: {self.success_requests}, 
-                        Total: {self.total_requests}
-                        /n messages: {messages}
-                        /n response: {response.message.content}""")
             else:
                 break
 

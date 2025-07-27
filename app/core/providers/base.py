@@ -3,7 +3,7 @@ Base provider interface for LLM providers.
 Abstract base class defining the standard interface for all providers.
 """
 from abc import ABC, abstractmethod
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, Dict, Any
 from datetime import datetime
 
 from app.models.providers import ProviderConfig
@@ -11,6 +11,7 @@ from app.models.tools.tools import Tool
 from app.models.health import HealthStatus
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.tools.tool_registry import ToolRegistry
+from app.utils.logging import logger
 import json
 
 class ProviderError(Exception):
@@ -63,6 +64,8 @@ class BaseProvider(ABC):
         self.client = None
         self.initialized = False
         self.cached_tools = {}  # Cache tools per agent_id
+
+        self.tool_calls_made = []
 
     @abstractmethod 
     async def health_check(self) -> HealthStatus:
@@ -121,8 +124,25 @@ class BaseProvider(ABC):
         Execute a tool call with extracted name and arguments.
         Each provider extracts these from their own API structure.
         """
+
         if agent_id:
             agent_manager = AgentToolManager(agent_id)
-            return await agent_manager.execute_tool(tool_name, arguments)
+
+            result = await agent_manager.execute_tool(tool_name, arguments)
+
+            if self.config.track_tool_calls:
+
+                self.tool_calls_made.append({
+                    "tool_name": tool_name,
+                    "arguments": arguments
+                })
+                
+            return result
         else:
             return ToolRegistry.execute_tool_call(tool_name, arguments)
+        
+    def get_tool_calls_made(self) -> list[Dict[str, str]]:
+        return self.tool_calls_made
+    
+    def clear_tool_calls_made(self) -> None:
+        self.tool_calls_made.clear()

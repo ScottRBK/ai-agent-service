@@ -70,7 +70,7 @@ class BaseAgent:
 
             # Get system prompt
             self.system_prompt = self.prompt_manager.get_system_prompt_with_tools(self.available_tools)
-            logger.debug(f"System prompt: {self.system_prompt}")
+            logger.debug(f"System prompt: {self.system_prompt[:10]}")
 
             # Get model and settings with priority: CLI args > agent config > provider default
             agent_model, agent_model_settings = self.resource_manager.get_model_config()
@@ -86,6 +86,7 @@ class BaseAgent:
         except Exception as e:
             logger.error(f"Error during agent initialization: {e}")
             raise
+    
     
     def _clean_response_for_memory(self, response: str) -> str:
         """Clean response before storing in memory."""

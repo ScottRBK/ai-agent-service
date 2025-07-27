@@ -9,6 +9,7 @@ Provide a clear, chronological summary of past interactions that future agents c
 2. **NEVER** exceed **300 words** (run a word-count check).
 3. **ALWAYS** include the sections: Topic, Decision, Tech details, Context, Handover.
 4. Summaries **MUST** follow the order events occurred.
+5. Summaries **MUST** retain information from the previous summary
 
 # 4 Capabilities & Tools
 `get_current_datetime()` → returns ISO-8601 date + time.  

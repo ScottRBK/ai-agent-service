@@ -203,12 +203,6 @@ class AzureOpenAIProvider(BaseProvider):
     async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
 
-        logger.debug(f"AzureOpenAIProvider - send_chat - model: {model}")
-        logger.debug(f"AzureOpenAIProvider - send_chat - instructions: {instructions}")
-        logger.debug(f"AzureOpenAIProvider - send_chat - context: {context}")
-        logger.debug(f"AzureOpenAIProvider - send_chat - agent_id: {agent_id}")
-        logger.debug(f"AzureOpenAIProvider - send_chat - self.client: {self.client.base_url}")
-
         available_tools = await self.get_available_tools(agent_id, tools)
         logger.debug(f"AzureOpenAIProvider - send_chat - available tools: {available_tools}")
 
@@ -222,8 +216,9 @@ class AzureOpenAIProvider(BaseProvider):
             
             function_call_outputs = []
             for output in response.output:
+
                 if output.type == "function_call":
-                    logger.debug(f"AzureOpenAIProvider - send_chat - function_call: {output.model_dump_json()}")
+
                     function_call_outputs.append(output)
                     tool_messages.append(output)
             
@@ -238,10 +233,7 @@ class AzureOpenAIProvider(BaseProvider):
                     tools=available_tools
                 )
                 await self.record_successful_call()
-                logger.debug(f"""AzureOpenAIProvider - send_chat - Success: {self.success_requests}, 
-                        Total: {self.total_requests}
-                        /n messages: {tool_messages}
-                        /n response: {response.output_text}""")
+
             else:
                 break
                 
@@ -249,21 +241,13 @@ class AzureOpenAIProvider(BaseProvider):
             logger.error(f"""AzureOpenAIProvider - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
             raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
 
-        logger.debug(f"""AzureOpenAIProvider - send_chat - completed Total Requests: {self.total_requests}""")
         return response.output_text
 
     async def send_chat_with_streaming(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> AsyncGenerator[str, None]:
         """Send input to the provider and return the response."""
 
-        logger.debug(f"AzureOpenAIProvider - send_chat_with_streaming - model: {model}")
-        logger.debug(f"AzureOpenAIProvider - send_chat_with_streaming - instructions: {instructions}")
-        logger.debug(f"AzureOpenAIProvider - send_chat_with_streaming - context: {context}")
-        logger.debug(f"AzureOpenAIProvider - send_chat_with_streaming - agent_id: {agent_id}")
-        logger.debug(f"AzureOpenAIProvider - send_chat_with_streaming - self.client: {self.client.base_url}")
-
         available_tools = await self.get_available_tools(agent_id, tools)
-        logger.debug(f"AzureOpenAIProvider - send_chat_with_streaming - available tools: {len(available_tools) if available_tools else 0}")
-        
+             
         logger.info(f"AzureOpenAIProvider - send_chat_with_streaming - starting streaming request to azure openai")
         
         # Prepare context with instructions - for Response API, instructions are passed separately

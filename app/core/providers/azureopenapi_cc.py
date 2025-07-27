@@ -49,11 +49,11 @@ class AzureOpenAIProviderCC(BaseProvider):
                 max_tokens=1
             )
             health = HealthStatus(status="healthy", timestamp=datetime.now(), service=self.config.name, version=self.version)
-            logger.debug(f"AzureOpenAIProviderCC Provider {self.config.name} - health_check - health: {health}")
+
             return health
         except Exception as e:
             health = HealthStatus(status="unhealthy", timestamp=datetime.now(), service=self.config.name, version=self.version, error_details=str(e))
-            logger.debug(f"AzureOpenAIProviderCC Provider {self.config.name} - health_check - health: {health}")
+
             return health
 
     async def cleanup(self) -> None:
@@ -61,7 +61,7 @@ class AzureOpenAIProviderCC(BaseProvider):
         try:
             if self.client:
                 self.client = None
-                logger.debug(f"AzureOpenAIProviderCC Provider {self.config.name} cleaned up")
+
         except Exception as e:
             logger.warning(f"""Error during cleanup 
                             AzureOpenAIProviderCC Provider {self.config.name} cleanup: {e}""")
@@ -215,16 +215,10 @@ class AzureOpenAIProviderCC(BaseProvider):
 
     async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
-        logger.debug(f"AzureOpenAIProviderCC - send_chat - model: {model}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat - instructions: {instructions}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat - context: {context}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat - tools: {tools}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat - agent_id: {agent_id}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat - self.client: {self.client.base_url}")
 
         messages = self._prepare_messages(instructions, context)
         available_tools = await self.get_available_tools(agent_id, tools)
-        logger.debug(f"AzureOpenAIProviderCC - send_chat - available tools: {len(available_tools) if available_tools else 0}")
+    
 
         request_params = {
             "model": model,
@@ -236,10 +230,6 @@ class AzureOpenAIProviderCC(BaseProvider):
         response = await self.client.chat.completions.create(**request_params)
         await self.record_successful_call()
 
-        logger.debug(f"""AzureOpenAIProviderCC - send_chat - Success: {self.success_requests}, 
-                        Total: {self.total_requests}
-                        /n messages: {messages}
-                        /n response: {response.choices[0].message.content}""")
         total_tool_iterations = 0
         for _ in range(self.max_tool_iterations):
             total_tool_iterations += 1
@@ -263,11 +253,7 @@ class AzureOpenAIProviderCC(BaseProvider):
                 response = await self.client.chat.completions.create(**request_params)
 
                 await self.record_successful_call()
-                
-                logger.debug(f"""AzureOpenAIProviderCC - send_chat - Success: {self.success_requests}, 
-                        Total: {self.total_requests}
-                        /n messages: {messages}
-                        /n response: {response.choices[0].message.content}""")
+
             else:
                 break
         if total_tool_iterations >= self.max_tool_iterations:
@@ -280,15 +266,10 @@ class AzureOpenAIProviderCC(BaseProvider):
     async def send_chat_with_streaming(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> AsyncGenerator[str, None]:
         """Send input to the provider and return the response."""
         
-        logger.debug(f"AzureOpenAIProviderCC - send_chat_with_streaming - model: {model}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat_with_streaming - instructions: {instructions}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat_with_streaming - context: {context}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat_with_streaming - agent_id: {agent_id}")
-        logger.debug(f"AzureOpenAIProviderCC - send_chat_with_streaming - self.client: {self.client.base_url}")
+
 
         messages = self._prepare_messages(instructions, context)
         available_tools = await self.get_available_tools(agent_id, tools)
-        logger.debug(f"AzureOpenAIProviderCC - send_chat_with_streaming - available tools: {len(available_tools) if available_tools else 0}")
         
         logger.info(f"AzureOpenAIProviderCC - send_chat_with_streaming - starting streaming request to azure openai")
         

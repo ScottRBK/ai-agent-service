@@ -136,7 +136,6 @@ class PostgreSQLMemoryResource(BaseResource):
             db_session.commit()
             
             await self.record_successful_call()
-            logger.debug(f"Stored memory entry {db_entry.id} for user {memory_entry.user_id}")
             
             return db_entry.id
             
@@ -291,7 +290,6 @@ class PostgreSQLMemoryResource(BaseResource):
                 entry.is_active = False
                 db_session.commit()
                 await self.record_successful_call()
-                logger.debug(f"Deleted memory entry {memory_id}")
                 return True
             else:
                 logger.warning(f"Memory entry {memory_id} not found")

@@ -27,6 +27,7 @@ class ProviderConfig(BaseModel):
     track_usage: bool = False
     log_requests: bool = False
     log_responses: bool = False
+    track_tool_calls: bool = True
 
 class OllamaConfig(ProviderConfig):
     "Ollama-specific configuration"

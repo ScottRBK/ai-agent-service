@@ -79,7 +79,7 @@ class CLIAgent(BaseAgent):
         await self.save_memory("assistant", clean_response)
 
         compression_config = {
-            "threshold_tokens": 500,
+            "threshold_tokens": 4000,
             "recent_messages_to_keep": 4,
             "enabled": True
         }
