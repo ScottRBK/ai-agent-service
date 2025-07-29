@@ -74,7 +74,7 @@ def create_metrics():
 
 async def run_agent_and_create_test_case(golden: Golden) -> LLMTestCase:
     """Run agent once and create test case"""
-    agent = CLIAgent("cli_agent")
+    agent = CLIAgent("azure_agent")
     await agent.initialize()
     agent.provider.config.track_tool_calls = True
 
@@ -89,8 +89,13 @@ async def run_agent_and_create_test_case(golden: Golden) -> LLMTestCase:
         expected_output=golden.expected_output,
         actual_output=cleaned_response,
         tools_called=tools_called,
-        context=[golden.context] if hasattr(golden, "context") else []
+        context=[golden.context] if hasattr(golden, "context") else [],
+        additional_metadata={
+            "expected_tool_names": [t.name for t in golden.expected_tools] if golden.expected_tools else [],
+            "actual_tool_names": [t.name for t in tools_called] if tools_called else []
+        }
     )
+
 async def generate_tool_goldens() -> list[Golden]:
 
     synthesizer = Synthesizer(model=model, styling_config=styling_config)
@@ -160,7 +165,7 @@ async def load_dataset_with_tools(filename: str) -> List[Golden]:
     print(f"Loaded {len(goldens)} goldens from file {filename}")
     return goldens
 
-async def main(generate_goldens=False):
+async def main(generate_goldens=False, print_verbose=False):
 
     dataset = await get_tool_goldens(generate_goldens)
     print(f"Loaded {len(dataset.goldens)} goldens")
@@ -184,21 +189,27 @@ async def main(generate_goldens=False):
         )
     print("Evaluation complete")
 
+
+
     results_json = json.loads(results.model_dump_json())
 
     df = create_evaluation_dataframe(results_json)
 
-    print_evaluation_summary(df, results_json)
+    if print_verbose:
+        print_evaluation_summary_verbose(df)
+    else:
+        print_evaluation_summary(df)
 
     df.to_pickle("synthesizer_with_multiple_evals_results.pkl")
-
-
 
 def create_evaluation_dataframe(results_json):
     """Convert DeepEval results JSON to a comprehensive DataFrame"""
     rows = []
     
     for test_result in results_json.get('test_results', []):
+
+        metadata = test_result.get('additional_metadata', {})
+
         # Base information for each test
         base_info = {
             'test_name': test_result['name'],
@@ -207,6 +218,8 @@ def create_evaluation_dataframe(results_json):
             'actual_output': test_result.get('actual_output', ''),
             'expected_output': test_result.get('expected_output', ''),
             'context': str(test_result.get('context', [])),
+            'expected_tools': metadata.get('expected_tool_names', []),
+            'actual_tools': metadata.get('actual_tool_names', []),
         }
         
         # Create a row for each metric result
@@ -263,10 +276,44 @@ def print_evaluation_summary(df, results_json):
     if 'confident_link' in results_json:
         print(f"\n🔗 View in Confident AI: {results_json['confident_link']}")
 
+def print_evaluation_summary_verbose(df):
+    """Simple summary using the DataFrame"""
+    print("\n" + "="*80)
+    print("EVALUATION RESULTS")
+    print("="*80 + "\n")
+    
+    # Group by test to show each test once
+    for test_name, group in df.groupby('test_name'):
+        first_row = group.iloc[0]
+        test_num = int(test_name.split('_')[-1]) + 1
+        
+        print(f"Test {test_num}: {first_row['input'][:60]}...")
+        print(f"  Expected tools: {first_row['expected_tools']}")
+        print(f"  Actual tools:   {first_row['actual_tools']}")
+        
+        # Collect all metrics for this test
+        scores = []
+        for _, metric_row in group.iterrows():
+            status = "✅" if metric_row['metric_success'] else "❌"
+            name = metric_row['metric_name'].split()[0]
+            scores.append(f"{status}{name}:{metric_row['metric_score']:.1f}")
+        
+        print(f"  Metrics: {' | '.join(scores)}")
+        print(f"  Overall: {'✅ PASSED' if first_row['overall_success'] else '❌ FAILED'}\n")
+    
+    # Summary
+    unique_tests = df['test_name'].nunique()
+    passed_tests = df.groupby('test_name')['overall_success'].first().sum()
+    print("-" * 80)
+    print(f"TOTAL: {passed_tests}/{unique_tests} passed ({passed_tests/unique_tests*100:.0f}%)")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run synthesizer with tools evaluation")
     parser.add_argument("--generate", action="store_true", 
                        help="Generate golden test cases")
+    parser.add_argument("-v", "--verbose", action="store_true", 
+                       help="Print out each test case and its results")
+    
     args = parser.parse_args()
     
-    asyncio.run(main(generate_goldens=args.generate))
+    asyncio.run(main(generate_goldens=args.generate, print_verbose=args.verbose))
