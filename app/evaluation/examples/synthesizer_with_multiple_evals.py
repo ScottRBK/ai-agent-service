@@ -46,7 +46,6 @@ styling_config = StylingConfig(
     expected_output_format="A helpful response using information from the appropriate tool"
 )
 
-# 2. Configure synthesizer to generate tool-specific queries
 styling_config = StylingConfig(
     scenario="User asking questions that require specific tools",
     task="Generate queries that clearly indicate which tool to use",
@@ -165,43 +164,6 @@ async def load_dataset_with_tools(filename: str) -> List[Golden]:
     print(f"Loaded {len(goldens)} goldens from file {filename}")
     return goldens
 
-async def main(generate_goldens=False, print_verbose=False):
-
-    dataset = await get_tool_goldens(generate_goldens)
-    print(f"Loaded {len(dataset.goldens)} goldens")
-
-    test_cases = []
-    
-    for i, golden in enumerate(dataset.goldens):
-        print(f"Running test {i+1}/{len(dataset.goldens)}: {golden.input[:60]}...")
-
-        test_case = await run_agent_and_create_test_case(golden)
-        
-        test_cases.append(test_case)
-
-    metrics = create_metrics()
-
-    print("\nEvaluating...")
-    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-        results = evaluate(
-            test_cases=test_cases,
-            metrics=metrics
-        )
-    print("Evaluation complete")
-
-
-
-    results_json = json.loads(results.model_dump_json())
-
-    df = create_evaluation_dataframe(results_json)
-
-    if print_verbose:
-        print_evaluation_summary_verbose(df)
-    else:
-        print_evaluation_summary(df)
-
-    df.to_pickle("synthesizer_with_multiple_evals_results.pkl")
-
 def create_evaluation_dataframe(results_json):
     """Convert DeepEval results JSON to a comprehensive DataFrame"""
     rows = []
@@ -306,6 +268,44 @@ def print_evaluation_summary_verbose(df):
     passed_tests = df.groupby('test_name')['overall_success'].first().sum()
     print("-" * 80)
     print(f"TOTAL: {passed_tests}/{unique_tests} passed ({passed_tests/unique_tests*100:.0f}%)")
+
+async def main(generate_goldens=False, print_verbose=False):
+
+    dataset = await get_tool_goldens(generate_goldens)
+    print(f"Loaded {len(dataset.goldens)} goldens")
+
+    test_cases = []
+    
+    for i, golden in enumerate(dataset.goldens):
+        print(f"Running test {i+1}/{len(dataset.goldens)}: {golden.input[:60]}...")
+
+        test_case = await run_agent_and_create_test_case(golden)
+        
+        test_cases.append(test_case)
+
+    metrics = create_metrics()
+
+    print("\nEvaluating...")
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        results = evaluate(
+            test_cases=test_cases,
+            metrics=metrics
+        )
+    print("Evaluation complete")
+
+
+
+    results_json = json.loads(results.model_dump_json())
+
+    df = create_evaluation_dataframe(results_json)
+
+    if print_verbose:
+        print_evaluation_summary_verbose(df)
+    else:
+        print_evaluation_summary(df)
+
+    df.to_pickle("synthesizer_with_multiple_evals_results.pkl")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run synthesizer with tools evaluation")
