@@ -283,9 +283,13 @@ class TestGoldenDataset:
         mock_file = mock_open()
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.dump') as mock_dump:
+             patch('pickle.dump') as mock_dump, \
+             patch('pathlib.Path.mkdir') as mock_mkdir:
             
             dataset.save("/test/path/dataset.pkl")
+        
+        # Verify directory creation was called
+        mock_mkdir.assert_called_once_with(parents=True, exist_ok=True)
         
         # Verify file was opened correctly
         mock_file.assert_called_once_with("/test/path/dataset.pkl", 'wb')
@@ -300,7 +304,8 @@ class TestGoldenDataset:
         mock_file = mock_open()
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.dump') as mock_dump:
+             patch('pickle.dump') as mock_dump, \
+             patch('pathlib.Path.mkdir') as mock_mkdir:
             
             dataset.save("/test/path/empty_dataset.pkl")
         
@@ -312,7 +317,8 @@ class TestGoldenDataset:
         dataset = GoldenDataset("test_dataset")
         dataset.goldens = [mock_golden]
         
-        with patch('builtins.open', side_effect=IOError("Permission denied")):
+        with patch('builtins.open', side_effect=IOError("Permission denied")), \
+             patch('pathlib.Path.mkdir'):
             
             # Should propagate the IOError
             with pytest.raises(IOError, match="Permission denied"):
@@ -326,7 +332,8 @@ class TestGoldenDataset:
         mock_file = mock_open()
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.dump', side_effect=pickle.PicklingError("Cannot pickle object")):
+             patch('pickle.dump', side_effect=pickle.PicklingError("Cannot pickle object")), \
+             patch('pathlib.Path.mkdir'):
             
             # Should propagate the PicklingError
             with pytest.raises(pickle.PicklingError, match="Cannot pickle object"):
@@ -339,7 +346,8 @@ class TestGoldenDataset:
         mock_file = mock_open()
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.load', return_value=[mock_golden]) as mock_load:
+             patch('pickle.load', return_value=[mock_golden]) as mock_load, \
+             patch('pathlib.Path.exists', return_value=True):
             
             dataset.load("/test/path/dataset.pkl")
         
@@ -357,7 +365,8 @@ class TestGoldenDataset:
         mock_file = mock_open()
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.load', return_value=[]):
+             patch('pickle.load', return_value=[]), \
+             patch('pathlib.Path.exists', return_value=True):
             
             dataset.load("/test/path/empty_dataset.pkl")
         
@@ -368,10 +377,10 @@ class TestGoldenDataset:
         """Test load operation with file not found"""
         dataset = GoldenDataset("test_dataset")
         
-        with patch('builtins.open', side_effect=FileNotFoundError("File not found")):
+        with patch('pathlib.Path.exists', return_value=False):
             
-            # Should propagate the FileNotFoundError
-            with pytest.raises(FileNotFoundError, match="File not found"):
+            # Should raise FileNotFoundError
+            with pytest.raises(FileNotFoundError, match="Dataset file not found"):
                 dataset.load("/nonexistent/path/dataset.pkl")
 
     def test_load_pickle_error(self):
@@ -381,7 +390,8 @@ class TestGoldenDataset:
         mock_file = mock_open()
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.load', side_effect=pickle.UnpicklingError("Cannot unpickle object")):
+             patch('pickle.load', side_effect=pickle.UnpicklingError("Cannot unpickle object")), \
+             patch('pathlib.Path.exists', return_value=True):
             
             # Should propagate the UnpicklingError
             with pytest.raises(pickle.UnpicklingError, match="Cannot unpickle object"):
@@ -398,7 +408,8 @@ class TestGoldenDataset:
         mock_file = mock_open()
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.load', return_value=[mock_golden]):
+             patch('pickle.load', return_value=[mock_golden]), \
+             patch('pathlib.Path.exists', return_value=True):
             
             dataset.load("/test/path/dataset.pkl")
         
@@ -534,7 +545,8 @@ class TestGoldenDataset:
         # Test save operation
         mock_file = mock_open()
         with patch('builtins.open', mock_file), \
-             patch('pickle.dump') as mock_dump:
+             patch('pickle.dump') as mock_dump, \
+             patch('pathlib.Path.mkdir') as mock_mkdir:
             
             dataset.save("/test/workflow.pkl")
             
@@ -546,7 +558,8 @@ class TestGoldenDataset:
         new_dataset = GoldenDataset("loaded_workflow")
         
         with patch('builtins.open', mock_file), \
-             patch('pickle.load', return_value=[mock_golden]) as mock_load:
+             patch('pickle.load', return_value=[mock_golden]) as mock_load, \
+             patch('pathlib.Path.exists', return_value=True):
             
             new_dataset.load("/test/workflow.pkl")
             
@@ -622,7 +635,9 @@ class TestGoldenDataset:
         mock_file = mock_open()
         with patch('builtins.open', mock_file), \
              patch('pickle.dump'), \
-             patch('pickle.load', return_value=[mock_golden]):
+             patch('pickle.load', return_value=[mock_golden]), \
+             patch('pathlib.Path.mkdir'), \
+             patch('pathlib.Path.exists', return_value=True):
             
             dataset.save("/test/path.pkl")
             assert dataset.name == original_name

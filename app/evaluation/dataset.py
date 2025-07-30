@@ -1,9 +1,11 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from deepeval.synthesizer import Synthesizer
 from deepeval.dataset import Golden
 import pickle
 import pandas as pd
 from deepeval.test_case import ToolCall
+from app.evaluation.config import ContextWithMetadata
+from pathlib import Path
 
 class GoldenDataset:
     """Manages golden test cases"""
@@ -12,7 +14,7 @@ class GoldenDataset:
         self.name = name
         self.goldens: List[Golden] = []
         
-    async def generate_from_contexts(self, contexts_with_metadata: List[Dict], 
+    async def generate_from_contexts(self, contexts_with_metadata: Union[List[Dict], List[ContextWithMetadata]], 
                                    synthesizer_config: Dict,
                                    max_goldens_per_context: int = 2) -> None:
         """Generate goldens from contexts"""
@@ -20,8 +22,16 @@ class GoldenDataset:
         print(f"\nGenerating goldens from {len(contexts_with_metadata)} contexts")
         
         for context_data in contexts_with_metadata:
+            # Handle both dict and ContextWithMetadata formats
+            if isinstance(context_data, ContextWithMetadata):
+                context = context_data.context
+                tools = context_data.tools
+            else:
+                context = context_data["context"]
+                tools = context_data["tools"]
+            
             goldens = await synthesizer.a_generate_goldens_from_contexts(
-                contexts=[context_data["context"]],
+                contexts=[context],
                 include_expected_output=True,
                 max_goldens_per_context=max_goldens_per_context
             )
@@ -30,7 +40,7 @@ class GoldenDataset:
             for i, golden in enumerate(goldens):
                 print(f"  Golden {i+1}: {golden.input[:50]}...")
                 golden.expected_tools = [
-                    ToolCall(name=tool) for tool in context_data["tools"]
+                    ToolCall(name=tool) for tool in tools
                 ]
             
             self.goldens.extend(goldens)
@@ -38,11 +48,19 @@ class GoldenDataset:
     
     def save(self, filepath: str):
         """Save dataset"""
+        # Ensure parent directory exists
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
         with open(filepath, 'wb') as f:
             pickle.dump(self.goldens, f)
     
     def load(self, filepath: str):
         """Load dataset"""
+        path = Path(filepath)
+        if not path.exists():
+            raise FileNotFoundError(f"Dataset file not found: {filepath}")
+            
         with open(filepath, 'rb') as f:
             self.goldens = pickle.load(f)
 
@@ -54,7 +72,7 @@ class GoldenDataset:
             data.append({
                 'input': golden.input,
                 'expected_output': golden.expected_output,
-                'context': str(golden.context),
-                'expected_tools': [t.name for t in golden.expected_tools]
+                'context': str(golden.context) if hasattr(golden, 'context') else '',
+                'expected_tools': [t.name for t in golden.expected_tools] if hasattr(golden, 'expected_tools') else []
             })
         return pd.DataFrame(data)

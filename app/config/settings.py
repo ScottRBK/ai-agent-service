@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # Application Info
     SERVICE_NAME: str = "AI Agent Service"
-    SERVICE_VERSION: str = "0.1.10"
+    SERVICE_VERSION: str = "0.2.0"
     SERVICE_DESCRIPTION: str = "AI Agent Service that provides intelligent automation and AI-powered capabilities"
 
     # Server Configuration
@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     AGENT_CONFIG_PATH: str = "agent_config.json"
     MCP_CONFIG_PATH: str = "mcp.json"
     PROMPTS_DIR_PATH: str = "prompts"
+    EVALUATION_OUTPUT_DIR: str = "evaluations/output"
 
     # AZURE OpenAI Configuration
     AZURE_OPENAI_BASE_URL: str = "https://{your-custom-endpoint}.openai.azure.com/"

@@ -6,18 +6,62 @@ import json
 import uuid
 from deepeval.test_case import LLMTestCase, ToolCall
 from deepeval.dataset import Golden
+from deepeval.synthesizer.config import StylingConfig
+from deepeval.metrics import BaseMetric
 
 from app.evaluation.runner import EvaluationRunner
 from app.evaluation.dataset import GoldenDataset
+from app.evaluation.config import EvaluationConfig, SynthesizerConfig, ContextWithMetadata
 
 
 class TestEvaluationRunner:
     """Test suite for EvaluationRunner"""
     
     @pytest.fixture
-    def runner(self):
+    def mock_config(self, mock_metrics):
+        """Create a mock EvaluationConfig"""
+        # Create mock model
+        mock_model = Mock()
+        
+        # Create styling config
+        styling_config = StylingConfig(
+            scenario="Agent evaluation",
+            task="Generate test cases for agent behavior"
+        )
+        
+        # Create synthesizer config
+        synthesizer_config = SynthesizerConfig(
+            model=mock_model,
+            styling_config=styling_config,
+            max_goldens_per_context=2
+        )
+        
+        # Create contexts
+        contexts = [
+            ContextWithMetadata(
+                context=["AI news context"],
+                tools=["searxng__searxng_web_search"]
+            )
+        ]
+        
+        # Create evaluation config
+        config = EvaluationConfig(
+            agent_id="test_agent",
+            synthesizer_config=synthesizer_config,
+            metrics=mock_metrics,
+            contexts=contexts,
+            dataset_name="test_dataset",
+            dataset_file="test_dataset.json",
+            results_file="test_results.pkl"
+        )
+        
+        return config
+    
+    @pytest.fixture
+    def runner(self, mock_config):
         """Create an EvaluationRunner instance"""
-        return EvaluationRunner()
+        with patch.object(EvaluationRunner, '_setup_output_directories'):
+            return EvaluationRunner(mock_config)
     
     @pytest.fixture
     def mock_golden(self):
@@ -40,9 +84,9 @@ class TestEvaluationRunner:
     @pytest.fixture
     def mock_metrics(self):
         """Create mock metrics"""
-        metric1 = Mock()
+        metric1 = Mock(spec=BaseMetric)
         metric1.name = "tool_correctness"
-        metric2 = Mock()
+        metric2 = Mock(spec=BaseMetric)
         metric2.name = "coherence"
         return [metric1, metric2]
     
@@ -87,11 +131,15 @@ class TestEvaluationRunner:
             ]
         }
     
-    def test_init(self, runner):
+    def test_init(self, runner, mock_config):
         """Test EvaluationRunner initialization"""
         assert hasattr(runner, 'results_cache')
         assert isinstance(runner.results_cache, dict)
         assert len(runner.results_cache) == 0
+        assert hasattr(runner, 'config')
+        assert runner.config == mock_config
+        assert hasattr(runner, 'dataset')
+        assert runner.dataset.name == mock_config.dataset_name
     
     @pytest.mark.asyncio
     async def test_run_evaluation_success(self, runner, mock_dataset, mock_metrics, mock_evaluation_results):
@@ -102,27 +150,35 @@ class TestEvaluationRunner:
         
         with patch('app.evaluation.runner.evaluate', return_value=mock_evaluate_result) as mock_evaluate:
             with patch.object(runner, '_create_test_case', new_callable=AsyncMock) as mock_create_test_case:
-                # Setup mock test case
-                mock_test_case = Mock(spec=LLMTestCase)
-                mock_create_test_case.return_value = mock_test_case
-                
-                # Run evaluation
-                results = await runner.run_evaluation("test_agent", mock_dataset, mock_metrics)
-                
-                # Verify test case creation
-                mock_create_test_case.assert_called_once_with("test_agent", mock_dataset.goldens[0])
-                
-                # Verify evaluate was called
-                mock_evaluate.assert_called_once()
-                test_cases_arg = mock_evaluate.call_args[1]['test_cases']
-                assert len(test_cases_arg) == 1
-                assert test_cases_arg[0] == mock_test_case
-                
-                # Verify results structure
-                assert 'raw_results' in results
-                assert 'dataframe' in results
-                assert 'summary' in results
-                assert isinstance(results['dataframe'], pd.DataFrame)
+                with patch.object(runner, '_get_results_path', return_value=MagicMock()):
+                    with patch('pandas.DataFrame.to_pickle') as mock_to_pickle:
+                        # Setup mock test case
+                        mock_test_case = Mock(spec=LLMTestCase)
+                        mock_create_test_case.return_value = mock_test_case
+                        
+                        # Set the dataset on the runner
+                        runner.dataset = mock_dataset
+                        
+                        # Run evaluation
+                        results = await runner.run_evaluation()
+                        
+                        # Verify test case creation
+                        mock_create_test_case.assert_called_once_with(mock_dataset.goldens[0])
+                        
+                        # Verify evaluate was called
+                        mock_evaluate.assert_called_once()
+                        test_cases_arg = mock_evaluate.call_args[1]['test_cases']
+                        assert len(test_cases_arg) == 1
+                        assert test_cases_arg[0] == mock_test_case
+                        
+                        # Verify file saving was attempted
+                        mock_to_pickle.assert_called_once()
+                        
+                        # Verify results structure
+                        assert 'raw_results' in results
+                        assert 'dataframe' in results
+                        assert 'summary' in results
+                        assert isinstance(results['dataframe'], pd.DataFrame)
     
     @pytest.mark.asyncio
     async def test_run_evaluation_multiple_goldens(self, runner, mock_metrics, mock_evaluation_results):
@@ -145,14 +201,19 @@ class TestEvaluationRunner:
         
         with patch('app.evaluation.runner.evaluate', return_value=mock_evaluate_result):
             with patch.object(runner, '_create_test_case', new_callable=AsyncMock) as mock_create_test_case:
-                mock_create_test_case.return_value = Mock(spec=LLMTestCase)
-                
-                results = await runner.run_evaluation("test_agent", dataset, mock_metrics)
-                
-                # Verify create_test_case was called for each golden
-                assert mock_create_test_case.call_count == 3
-                for i, golden in enumerate(goldens):
-                    mock_create_test_case.assert_any_call("test_agent", golden)
+                with patch.object(runner, '_get_results_path', return_value=MagicMock()):
+                    with patch('pandas.DataFrame.to_pickle'):
+                        mock_create_test_case.return_value = Mock(spec=LLMTestCase)
+                        
+                        # Set the dataset on the runner
+                        runner.dataset = dataset
+                        
+                        results = await runner.run_evaluation()
+                        
+                        # Verify create_test_case was called for each golden
+                        assert mock_create_test_case.call_count == 3
+                        for i, golden in enumerate(goldens):
+                            mock_create_test_case.assert_any_call(golden)
     
     @pytest.mark.asyncio
     async def test_create_test_case(self, runner):
@@ -166,7 +227,7 @@ class TestEvaluationRunner:
         
         # Mock CLIAgent
         mock_agent = AsyncMock()
-        mock_agent.agent_id = "test_agent"
+        mock_agent.agent_id = runner.config.agent_id
         mock_agent.session_id = None
         mock_agent.user_id = None
         mock_agent.initialize = AsyncMock()
@@ -176,7 +237,7 @@ class TestEvaluationRunner:
         mock_agent.provider.get_tool_calls_made = Mock(return_value=[{"tool_name": "test_tool"}])
         
         with patch('app.evaluation.runner.CLIAgent', return_value=mock_agent):
-            test_case = await runner._create_test_case("test_agent", golden)
+            test_case = await runner._create_test_case(golden)
             
             # Verify agent initialization
             assert mock_agent.session_id is not None
@@ -197,7 +258,7 @@ class TestEvaluationRunner:
             assert test_case.expected_tools[0].name == "test_tool"
             assert len(test_case.tools_called) == 1
             assert test_case.tools_called[0].name == "test_tool"
-            assert test_case.additional_metadata['agent_id'] == "test_agent"
+            assert test_case.additional_metadata['agent_id'] == runner.config.agent_id
     
     @pytest.mark.asyncio
     async def test_create_test_case_no_tools(self, runner):
@@ -209,7 +270,7 @@ class TestEvaluationRunner:
         golden.expected_tools = []
         
         mock_agent = AsyncMock()
-        mock_agent.agent_id = "test_agent"
+        mock_agent.agent_id = runner.config.agent_id
         mock_agent.initialize = AsyncMock()
         mock_agent.chat = AsyncMock(return_value="Simple response")
         mock_agent.provider = Mock()
@@ -217,7 +278,7 @@ class TestEvaluationRunner:
         mock_agent.provider.get_tool_calls_made = Mock(return_value=[])
         
         with patch('app.evaluation.runner.CLIAgent', return_value=mock_agent):
-            test_case = await runner._create_test_case("test_agent", golden)
+            test_case = await runner._create_test_case(golden)
             
             assert len(test_case.tools_called) == 0
             assert test_case.additional_metadata['actual_tool_names'] == []
@@ -348,8 +409,11 @@ class TestEvaluationRunner:
         with patch.object(runner, '_create_test_case', new_callable=AsyncMock) as mock_create_test_case:
             mock_create_test_case.side_effect = Exception("Agent initialization failed")
             
+            # Set the dataset on the runner
+            runner.dataset = mock_dataset
+            
             with pytest.raises(Exception) as exc_info:
-                await runner.run_evaluation("test_agent", mock_dataset, mock_metrics)
+                await runner.run_evaluation()
             
             assert "Agent initialization failed" in str(exc_info.value)
     
@@ -364,9 +428,9 @@ class TestEvaluationRunner:
         
         captured_agents = []
         
-        def capture_agent(*args, **kwargs):
+        def capture_agent(agent_id):
             agent = AsyncMock()
-            agent.agent_id = args[0]
+            agent.agent_id = agent_id
             agent.initialize = AsyncMock()
             agent.chat = AsyncMock(return_value="Response")
             agent.provider = Mock()
@@ -376,9 +440,9 @@ class TestEvaluationRunner:
             return agent
         
         with patch('app.evaluation.runner.CLIAgent', side_effect=capture_agent):
-            # Create multiple test cases
-            test_case1 = await runner._create_test_case("agent1", golden)
-            test_case2 = await runner._create_test_case("agent2", golden)
+            # Create multiple test cases  
+            test_case1 = await runner._create_test_case(golden)
+            test_case2 = await runner._create_test_case(golden)
             
             # Verify unique IDs
             assert len(captured_agents) == 2
@@ -422,9 +486,14 @@ class TestEvaluationRunner:
             
             with patch('app.evaluation.runner.evaluate', return_value=mock_evaluate_result):
                 with patch.object(runner, '_create_test_case', new_callable=AsyncMock) as mock_create:
-                    mock_create.return_value = Mock(spec=LLMTestCase)
-                    
-                    await runner.run_evaluation("test_agent", mock_dataset, mock_metrics)
+                    with patch.object(runner, '_get_results_path', return_value=MagicMock()):
+                        with patch('pandas.DataFrame.to_pickle'):
+                            mock_create.return_value = Mock(spec=LLMTestCase)
+                            
+                            # Set the dataset on the runner
+                            runner.dataset = mock_dataset
+                            
+                            await runner.run_evaluation()
             
             output = captured_output.getvalue()
             
@@ -490,7 +559,7 @@ class TestEvaluationRunner:
         ]
         
         mock_agent = AsyncMock()
-        mock_agent.agent_id = "multi_tool_agent"
+        mock_agent.agent_id = runner.config.agent_id
         mock_agent.initialize = AsyncMock()
         mock_agent.chat = AsyncMock(return_value="Response using multiple tools")
         mock_agent.provider = Mock()
@@ -502,7 +571,7 @@ class TestEvaluationRunner:
         ])
         
         with patch('app.evaluation.runner.CLIAgent', return_value=mock_agent):
-            test_case = await runner._create_test_case("multi_tool_agent", golden)
+            test_case = await runner._create_test_case(golden)
             
             # Verify multiple tools handling
             assert len(test_case.tools_called) == 3

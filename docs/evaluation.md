@@ -1,0 +1,260 @@
+# Evaluation Framework
+
+## Overview
+
+The AI Agent Service includes a comprehensive evaluation framework built on [DeepEval](https://docs.confident-ai.com/) that enables systematic assessment of agent performance. This framework supports synthetic test data generation, multiple evaluation metrics, and detailed result analysis to ensure agents perform reliably and accurately.
+
+## Architecture
+
+The evaluation framework consists of several key components:
+
+### Core Components
+
+- **`config.py`** - Pydantic models for evaluation configuration
+  - `EvaluationConfig`: Complete evaluation setup including agent, metrics, and datasets
+  - `SynthesizerConfig`: Configuration for synthetic data generation
+  - `ContextWithMetadata`: Context data paired with expected tool usage
+
+- **`runner.py`** - Main evaluation execution engine
+  - Handles the complete evaluation workflow
+  - Manages golden dataset generation and loading
+  - Executes agent interactions and collects results
+  - Provides result analysis and reporting
+
+- **`dataset.py`** - Golden dataset management
+  - Creates and manages synthetic test cases
+  - Supports serialization/deserialization of test data
+  - Integrates with DeepEval's synthesizer for data generation
+
+- **`evaluation_utils.py`** - Result analysis utilities
+  - Formats and displays evaluation summaries
+  - Provides both standard and verbose output modes
+  - Calculates metrics and pass rates
+
+- **`evals/`** - Agent-specific evaluation configurations
+  - Contains evaluation setups for different agents
+  - Each file defines its own metrics and test contexts
+  - Example: `cli_agent.py` for CLI agent evaluation
+
+## Creating Agent Evaluations
+
+To create an evaluation for a specific agent, follow this pattern (using `cli_agent.py` as an example):
+
+```python
+from deepeval.synthesizer.config import StylingConfig
+from deepeval.metrics import ToolCorrectnessMetric, GEval, HallucinationMetric
+from deepeval.models import OllamaModel
+from app.evaluation.config import EvaluationConfig, SynthesizerConfig, ContextWithMetadata
+from app.evaluation.runner import EvaluationRunner
+
+def create_evaluation_config() -> EvaluationConfig:
+    # 1. Define the evaluation model
+    model = OllamaModel(model="mistral:7b", temperature=0.0)
+    
+    # 2. Configure synthetic data generation
+    styling_config = StylingConfig(
+        scenario="User asking questions that require specific tools",
+        task="Generate queries that clearly indicate which tool to use",
+        input_format="Natural language queries",
+        expected_output_format="Helpful responses using tool information"
+    )
+    
+    # 3. Define test contexts with expected tools
+    contexts = [
+        ContextWithMetadata(
+            context=["Search results show GPT-4 was released in March 2023..."],
+            tools=["searxng__searxng_web_search"]
+        )
+    ]
+    
+    # 4. Configure evaluation metrics
+    metrics = [
+        ToolCorrectnessMetric(),  # Validates correct tool usage
+        HallucinationMetric(threshold=0.5, model=model),  # Detects false information
+        GEval(  # Custom metric for coherence
+            name="coherence",
+            criteria="Is the response coherent and well-structured?",
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+            model=model
+        )
+    ]
+    
+    # 5. Return complete configuration
+    return EvaluationConfig(
+        agent_id="cli_agent",
+        synthesizer_config=SynthesizerConfig(
+            model=model,
+            styling_config=styling_config,
+            max_goldens_per_context=2
+        ),
+        metrics=metrics,
+        contexts=contexts,
+        dataset_name="cli_agent",
+        dataset_file="cli_agent_goldens.pkl",
+        results_file="cli_agent_results"
+    )
+```
+
+## Available Metrics
+
+The framework supports various DeepEval metrics:
+
+### Tool Correctness
+Validates that agents use the appropriate tools for given tasks:
+```python
+ToolCorrectnessMetric(threshold=0.5, include_reason=True)
+```
+
+### Hallucination Detection
+Measures factual accuracy against provided context:
+```python
+HallucinationMetric(threshold=0.5, model=model)
+```
+
+### Answer Relevancy
+Evaluates how well responses address the input query:
+```python
+AnswerRelevancyMetric(threshold=0.7, model=model)
+```
+
+### Custom GEval Metrics
+Create custom criteria-based evaluations:
+```python
+GEval(
+    name="format_compliance",
+    criteria="Does the response follow the expected API format?",
+    evaluation_params=[LLMTestCaseParams.ACTUAL_OUTPUT, LLMTestCaseParams.EXPECTED_OUTPUT],
+    model=model
+)
+```
+
+## Running Evaluations
+
+### Basic Usage
+
+1. **Generate golden test cases** (first time only):
+   ```bash
+   python app/evaluation/evals/cli_agent.py --generate
+   ```
+
+2. **Run evaluation** using existing golden dataset:
+   ```bash
+   python app/evaluation/evals/cli_agent.py
+   ```
+
+3. **Run with verbose output** for detailed results:
+   ```bash
+   python app/evaluation/evals/cli_agent.py --verbose
+   ```
+
+### Evaluation Workflow
+
+The evaluation process follows these steps:
+
+1. **Golden Generation** (if `--generate` flag is used)
+   - Uses DeepEval's synthesizer to create test cases from contexts
+   - Generates natural language queries that require specific tools
+   - Saves golden dataset to `evaluations/goldens/` directory
+
+2. **Agent Execution**
+   - Loads golden test cases
+   - Runs each test through the specified agent
+   - Collects responses and tool usage information
+
+3. **Metric Evaluation**
+   - Applies configured metrics to each test case
+   - Measures tool correctness, hallucination, relevancy, etc.
+   - Generates scores and pass/fail results
+
+4. **Result Analysis**
+   - Saves detailed results to `evaluations/results/` with timestamps
+   - Displays summary statistics and per-metric breakdowns
+   - Provides verbose output option for debugging
+
+## Understanding Results
+
+### Standard Output
+Shows high-level summary:
+```
+EVALUATION SUMMARY
+==================
+
+📊 OVERALL RESULTS:
+  Total tests: 6
+  Passed: 5 (83.3%)
+  Failed: 1 (16.7%)
+
+📈 METRIC BREAKDOWN:
+  tool_correctness_metric:
+    Pass rate: 6/6 (100.0%)
+    Avg score: 1.000
+    Threshold: 0.5
+```
+
+### Verbose Output
+Provides detailed test-by-test results:
+```
+Test 1: What's the latest news about artificial intelligence?...
+  Expected tools: ['searxng__searxng_web_search']
+  Actual tools:   ['searxng__searxng_web_search']
+  Metrics: ✅ToolCorrectness:1.0 | ✅Coherence:0.9 | ✅Hallucination:0.8
+  Overall: ✅ PASSED
+```
+
+## Best Practices
+
+1. **Context Design**: Create contexts that clearly indicate which tools should be used
+2. **Metric Selection**: Choose metrics that align with your agent's purpose
+3. **Golden Dataset Size**: Generate enough test cases for statistical significance (10-20 per context)
+4. **Regular Evaluation**: Run evaluations after significant agent changes
+5. **Result Tracking**: Save evaluation results for trend analysis
+
+## Directory Structure
+
+Evaluation outputs are organized as follows:
+```
+evaluations/
+├── goldens/           # Synthetic test datasets
+│   └── cli_agent_goldens.pkl
+└── results/           # Evaluation results with timestamps
+    └── cli_agent_results-20250130123456.pkl
+```
+
+## Integration with Agent Development
+
+The evaluation framework integrates seamlessly with the agent architecture:
+
+- Uses the same agent configurations from `agent_config.json`
+- Leverages existing provider and tool systems
+- Supports all agent types (CLI, API, etc.)
+- Provides isolated test sessions to avoid state contamination
+
+## Advanced Usage
+
+### Custom Evaluation Models
+Use different models for evaluation:
+```python
+from deepeval.models import AzureOpenAI
+
+eval_model = AzureOpenAI(
+    deployment_name="gpt-4",
+    azure_api_version="2024-02-01"
+)
+```
+
+### Batch Evaluations
+Evaluate multiple agents:
+```python
+for agent_id in ["cli_agent", "api_agent", "research_agent"]:
+    config = create_evaluation_config(agent_id)
+    runner = EvaluationRunner(config)
+    await runner.run()
+```
+
+### Custom Result Processing
+Access raw evaluation data:
+```python
+results = await runner.run()
+df = results['dataframe']  # Pandas DataFrame for custom analysis
+raw = results['raw_results']  # Complete DeepEval output
+```

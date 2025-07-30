@@ -33,6 +33,11 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 * **Memory Compression** - Intelligent conversation history management with AI-powered summarization
 * **Response Processing** - Automatic response cleaning and formatting for memory storage
 
+### 🧪 **Testing & Evaluation**
+* **Agent Performance Assessment** - DeepEval integration for comprehensive evaluation
+* **Synthetic Test Generation** - Create golden datasets for consistent testing
+* **Metric-Based Evaluation** - Tool correctness, hallucination detection, answer relevancy
+
 ### 🚀 **Production & Quality**
 * **Docker Support** - Multi-stage builds with development and production targets
 * **Structured Logging** - Comprehensive logging setup for debugging and monitoring
@@ -128,15 +133,14 @@ ai-agent-service/
 │   │   ├── test_agents.py               # Agent API tests
 │   │   └── test_openai_compatible_integration.py # OpenAI API tests with streaming
 │   └── test_integration/                # End-to-end tests
-├── evaluations/
-│   └── examples/                        # DeepEval evaluation examples
-│       ├── tool_correctness.py          # Tool usage validation
-│       ├── hallucination.py             # Factual accuracy testing
-│       ├── summarization.py             # Summary quality assessment
-│       ├── geval_observe.py             # Custom metrics with observability
-│       ├── synthesizer_with_tools.py    # Golden dataset generation with tools
-│       ├── synthesizer_from_scratch.py  # Synthetic data generation
-│       └── task_completion_observe.py   # Task performance evaluation
+├── app/
+│   ├── evaluation/
+│   │   ├── config.py                    # Evaluation configuration models
+│   │   ├── runner.py                    # Evaluation execution engine
+│   │   ├── dataset.py                   # Golden dataset management
+│   │   ├── evaluation_utils.py          # Result analysis utilities
+│   │   └── evals/                       # Agent-specific evaluations
+│   │       └── cli_agent.py             # CLI agent evaluation example
 ├── examples/
 │   └── run_agent.py                     # CLI agent runner
 ├── docker/
@@ -239,6 +243,15 @@ For troubleshooting common issues, configuration problems, and deployment guidan
 - **Hallucination Detection**: Factual accuracy measurement
 - **Custom Metrics**: GEval with observability and tracing
 
+### Run Agent Evaluations
+```bash
+# Generate golden test cases
+python app/evaluation/evals/cli_agent.py --generate
+
+# Run evaluation with detailed output
+python app/evaluation/evals/cli_agent.py --verbose
+```
+
 ### Quick Test Commands
 ```bash
 # Run all tests
@@ -248,7 +261,7 @@ pytest tests/
 pytest tests/ --cov=app --cov-report=html
 ```
 
-For detailed testing examples and evaluation scripts, see [Usage Examples](docs/examples.md).
+For detailed testing examples and evaluation framework documentation, see [Evaluation Framework](docs/evaluation.md).
 
 
 ## 🛠️ Development
