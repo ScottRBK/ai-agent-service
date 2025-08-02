@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from app.utils.logging import logger
 from ollama import AsyncClient, ChatResponse, Message
 from datetime import datetime
-from typing import Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator
 
 class OllamaProvider(BaseProvider):
     def __init__(self, config: OllamaConfig):
@@ -218,3 +218,24 @@ class OllamaProvider(BaseProvider):
         logger.debug(f"""OllamaProvider - send_chat - completed Total Requests: {self.total_requests}""")
         return response.message.content
  
+    async def embed(self, text: str, model: str) -> list[float]:
+        """"Generate embeddings using Ollama"""
+        response = await self.client.embed(
+            model=model,
+            input=text
+        )
+        
+        # Validate response structure
+        if not hasattr(response, 'embeddings'):
+            raise AttributeError("Response missing 'embeddings' attribute")
+        
+        if response.embeddings is None:
+            raise TypeError("Embeddings is None")
+        
+        if len(response.embeddings) == 0:
+            raise IndexError("Embeddings list is empty")
+        
+        return response.embeddings[0]
+    
+    async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
+        return await super().rerank(model, query, candidates)

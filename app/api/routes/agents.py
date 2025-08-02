@@ -161,8 +161,6 @@ async def chat_with_agent(
         logger.error(f"Error in chat_with_agent: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
 @router.get("/{agent_id}/conversation/{session_id}", response_model=ConversationHistory)
 async def get_conversation_history(
     agent_id: str,

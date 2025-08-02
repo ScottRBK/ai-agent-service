@@ -3,7 +3,7 @@ Base provider interface for LLM providers.
 Abstract base class defining the standard interface for all providers.
 """
 from abc import ABC, abstractmethod
-from typing import Optional, AsyncGenerator, Dict, Any
+from typing import Optional, AsyncGenerator, Dict, Any, List
 from datetime import datetime
 
 from app.models.providers import ProviderConfig
@@ -90,6 +90,16 @@ class BaseProvider(ABC):
     @abstractmethod
     async def send_chat_with_streaming(self, context: list, model: str, instructions: str, tools: list[Tool]) -> AsyncGenerator[str, None]:
         """Stream input to the provider and yield the response."""
+        pass
+
+    @abstractmethod
+    async def embed(self, text: str) -> list[float]:
+        """Embed text using the provider."""
+        pass
+
+    @abstractmethod
+    async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
+        """Rerank candidates based on relevance to query. Returns scores in same order as candidates."""
         pass
 
     async def record_successful_call(self) -> None:

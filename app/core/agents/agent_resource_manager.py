@@ -93,6 +93,30 @@ class AgentResourceManager:
         
         return None
     
+    async def get_knowledge_base_resource(self) -> Optional[BaseResource]:
+        """Get knowledge base resource for this agent."""
+        # Check if agent is configured for knowledge_base
+        if not self.has_resource("knowledge_base"):
+            return None
+
+        # Check if knowledge_base resource already exists
+        resources = await self.get_agent_resources()
+        for resource in resources:
+            if resource.resource_type == ResourceType.KNOWLEDGE_BASE:
+                return resource
+
+        # If configured but doesn't exist, create it
+        logger.info(f"Creating knowledge base resource for agent {self.agent_id}")
+        await self.create_knowledge_base_resource()
+
+        # Get the newly created resource
+        resources = await self.get_agent_resources()
+        for resource in resources:
+            if resource.resource_type == ResourceType.KNOWLEDGE_BASE:
+                return resource
+
+        return None
+    
     async def create_memory_resource(self):
         """Create memory resource if not exists."""
         try:
@@ -101,7 +125,7 @@ class AgentResourceManager:
             
             # Build connection string
             connection_string = (
-                f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+                f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
                 f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
             )
             
@@ -124,7 +148,39 @@ class AgentResourceManager:
         except Exception as e:
             logger.error(f"Failed to create memory resource for agent {self.agent_id}: {e}")
             raise
-    
+
+    async def create_knowledge_base_resource(self):
+        """Create knowledge base resource if not exists."""
+        try:
+            from app.core.resources.knowledge_base import KnowledgeBaseResource
+            from app.config.settings import settings
+
+            # Get knowledge base config from agent config
+            kb_config = self.config.get("knowledge_base", {})
+
+            # Add PostgreSQL connection string
+            connection_string = (
+                f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+                f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+            )
+            
+            kb_config["connection_string"] = connection_string
+
+            # Create knowledge base resource
+            kb_resource = KnowledgeBaseResource("global_knowledge_base", kb_config)
+
+            # Register with resource manager
+            await self.resource_manager.create_resource(kb_resource)
+
+            # Assign to this agent
+            await self.resource_manager.assign_resource_to_agent(self.agent_id, "global_knowledge_base")
+
+            logger.info(f"Knowledge base resource created and assigned to agent {self.agent_id}")
+
+        except Exception as e:
+            logger.error(f"Failed to create knowledge base resource for agent {self.agent_id}: {e}")
+            raise   
+
     async def get_resources_by_type(self, resource_type: ResourceType) -> List[BaseResource]:
         """
         Get all resources of a specific type for this agent.

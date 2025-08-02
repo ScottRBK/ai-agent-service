@@ -40,6 +40,8 @@ class BaseAgent:
         # Memory resource - None if not configured
         self.memory_resource = None
         
+        self.knowledge_base_resource = None
+        
         # Store model configuration
         self.requested_model = model
         self.requested_model_settings = model_settings
@@ -51,6 +53,14 @@ class BaseAgent:
         """Get provider from agent configuration"""
         config = self.tool_manager.config
         return config.get("provider", "azure_openai_cc")
+
+    def get_resource(self, resource_type: str):
+        """Get resource by type name - cleaner API."""
+        if resource_type == "memory":
+            return self.memory_resource
+        elif resource_type == "knowledge_base":
+            return self.knowledge_base_resource
+        return None
     
     async def initialize(self):
         """Initialize the agent and provider"""
@@ -81,12 +91,30 @@ class BaseAgent:
 
             # Get memory resource if configured
             self.memory_resource = await self.resource_manager.get_memory_resource()
+
+            # Get knowledge base resource if configured
+            self.knowledge_base_resource = await self.resource_manager.get_knowledge_base_resource()
+            if self.knowledge_base_resource:
+                self.knowledge_base_resource.set_chat_provider(self.provider)
+
+                embedding_provider_id = self.tool_manager.config["embedding_provider"]
+                embedding_model = self.tool_manager.config["embedding_model"]
+
+                if embedding_provider_id:
+                    embedding_provider_info = self.provider_manager.get_provider(embedding_provider_id)
+                    embedding_config = embedding_provider_info["config_class"]()
+                    embedding_provider = embedding_provider_info["class"](embedding_config)
+                    await embedding_provider.initialize() 
+            
+            self.knowledge_base_resource.set_embedding_provider(embedding_provider, embedding_model)
+            
+            #TO:DO Implement re-rank provider
+
             
             self.initialized = True
         except Exception as e:
             logger.error(f"Error during agent initialization: {e}")
             raise
-    
     
     def _clean_response_for_memory(self, response: str) -> str:
         """Clean response before storing in memory."""

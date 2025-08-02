@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from app.utils.logging import logger
 from openai import AsyncAzureOpenAI
 from datetime import datetime
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, List
 
 class AzureOpenAIProviderCC(BaseProvider):
     def __init__(self, config: AzureOpenAIConfig):
@@ -275,3 +275,25 @@ class AzureOpenAIProviderCC(BaseProvider):
         
         async for content in self._handle_tool_calls_streaming(messages, model, available_tools, agent_id, model_settings):
             yield content
+
+    async def embed(self, text: str, model: str) -> list[float]:
+        """Embed text using the provider."""
+        response = await self.client.embeddings.create(
+            model=model,
+            input=text
+        )
+        
+        # Validate response structure
+        if not hasattr(response, 'data') or response.data is None:
+            raise AttributeError("Response missing 'data' attribute")
+        
+        if len(response.data) == 0:
+            raise IndexError("Response data is empty")
+        
+        if not hasattr(response.data[0], 'embedding') or response.data[0].embedding is None:
+            raise AttributeError("Response data missing 'embedding' attribute")
+        
+        return response.data[0].embedding
+    
+    async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
+        return await super().rerank(model, query, candidates)

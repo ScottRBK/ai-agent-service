@@ -10,8 +10,7 @@ import uuid
 import os
 from datetime import datetime, timezone, timedelta
 from typing import AsyncGenerator
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import psycopg
 from dotenv import load_dotenv
 
 from app.core.resources.memory import PostgreSQLMemoryResource
@@ -33,47 +32,47 @@ class TestMemoryResourceIntegration:
             "port": settings.POSTGRES_PORT,
             "user": settings.POSTGRES_USER,
             "password": settings.POSTGRES_PASSWORD,
-            "database": test_db_name
+            "dbname": test_db_name
         }
     
     @pytest.fixture(scope="class")
     def test_db_connection(self, test_db_config):
         """Create test database and provide connection."""
         # Connect to default database to create test database
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=test_db_config["host"],
             port=test_db_config["port"],
             user=test_db_config["user"],
             password=test_db_config["password"],
-            database=settings.POSTGRES_DB  # Connect to our configured database
+            dbname=settings.POSTGRES_DB  # Connect to our configured database
         )
-        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        conn.autocommit = True
         
         # Create test database
         with conn.cursor() as cursor:
-            cursor.execute(f"CREATE DATABASE {test_db_config['database']}")
+            cursor.execute(f"CREATE DATABASE {test_db_config['dbname']}")
         
         conn.close()
         
         # Connect to test database
-        test_conn = psycopg2.connect(**test_db_config)
+        test_conn = psycopg.connect(**test_db_config)
         yield test_conn
         
         # Cleanup: drop test database
         test_conn.close()
         
         # Reconnect to default database to drop test database
-        cleanup_conn = psycopg2.connect(
+        cleanup_conn = psycopg.connect(
             host=test_db_config["host"],
             port=test_db_config["port"],
             user=test_db_config["user"],
             password=test_db_config["password"],
-            database=settings.POSTGRES_DB
+            dbname=settings.POSTGRES_DB
         )
-        cleanup_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cleanup_conn.autocommit = True
         
         with cleanup_conn.cursor() as cursor:
-            cursor.execute(f"DROP DATABASE IF EXISTS {test_db_config['database']}")
+            cursor.execute(f"DROP DATABASE IF EXISTS {test_db_config['dbname']}")
         
         cleanup_conn.close()
     
@@ -83,7 +82,7 @@ class TestMemoryResourceIntegration:
         # Build connection string for test database
         connection_string = (
             f"postgresql://{test_db_config['user']}:{test_db_config['password']}"
-            f"@{test_db_config['host']}:{test_db_config['port']}/{test_db_config['database']}"
+            f"@{test_db_config['host']}:{test_db_config['port']}/{test_db_config['dbname']}"
         )
         
         config = {
@@ -266,4 +265,3 @@ class TestMemoryResourceIntegration:
         # Health check should pass when initialized
         is_healthy = await memory_resource.health_check()
         assert is_healthy is True
-

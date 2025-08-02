@@ -1,0 +1,391 @@
+
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import List, Optional
+from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, ForeignKey, text
+from sqlalchemy.orm import sessionmaker, Session, declarative_base, relationship
+from sqlalchemy.exc import SQLAlchemyError
+from pgvector.sqlalchemy import Vector, HALFVEC
+from sqlalchemy import Index
+
+from .base import VectorStoreProvider
+from app.models.resources.knowledge_base import Document, DocumentChunk, SearchResult, SearchFilters, DocumentType
+from app.utils.logging import logger
+
+Base = declarative_base()
+
+def safe_json_loads(value):
+    """Safely parse JSON string, return None if parsing fails."""
+    if value and isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    return None
+
+class DocumentTable(Base):
+    __tablename__ = 'knowledge_documents'
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))  
+    namespace = Column(String(255), nullable=False, index=True)
+    doc_type = Column(String(50), nullable=False)
+    source = Column(String(500))
+    title = Column(String(255))
+    content = Column(Text, nullable=False)
+    doc_metadata = Column(Text)  # JSON
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    chunks = relationship("ChunkTable", back_populates="document", cascade="all, delete-orphan")
+
+class ChunkTable(Base):
+    __tablename__ = 'knowledge_chunks'
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4())) 
+    document_id = Column(String(36), ForeignKey('knowledge_documents.id'), nullable=False)
+    namespace = Column(String(255), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding = Column(HALFVEC(2560), nullable=False)
+    chunk_metadata = Column(Text)  # JSON
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    
+    document = relationship("DocumentTable", back_populates="chunks")
+
+
+hnsw_index = Index(
+    'ix_chunks_embedding_hnsw',
+    ChunkTable.embedding,
+    postgresql_using='hnsw',
+    postgresql_with={'m': 16, 'ef_construction': 64},
+    postgresql_ops={'embedding': 'halfvec_cosine_ops'}
+)
+
+# Namespace index for faster filtering
+namespace_index = Index(
+    'ix_chunks_namespace',
+    ChunkTable.namespace
+)
+
+
+class PGVectorProvider(VectorStoreProvider):
+    """PostgresSQL with pgvector implementation"""
+
+    def __init__(self, config: dict):
+        super().__init__(config)
+        self.engine = None
+        self.SessionLocal = None
+        self.connection_string = config.get('connection_string')
+
+        if not self.connection_string:
+            raise ValueError("PostgreSQL connection string is required")
+        
+    async def initialize(self) -> None:
+        """Initialize PostgreSQL connection and create tables."""
+        try:
+            self.engine = create_engine(self.connection_string)
+            self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+            
+            # Register pgvector types
+            from sqlalchemy import event
+            from pgvector.psycopg import register_vector
+            
+            @event.listens_for(self.engine, "connect")
+            def connect(dbapi_connection, connection_record):
+                register_vector(dbapi_connection)
+            
+            # Create tables and indexes
+            Base.metadata.create_all(bind=self.engine)
+            self.initialized = True
+            logger.info("PGVector provider initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize PGVector provider: {e}")
+            raise
+
+    async def cleanup(self) -> None:
+        """Cleanup PostgreSQL connection."""
+        try:
+            if self.engine:
+                self.engine.dispose()
+                logger.info("PGVector provider cleaned up")
+        except Exception as e:
+            logger.error(f"Error during PGVector cleanup: {e}")
+
+    async def health_check(self) -> bool:
+        """Check if PostgreSQL connection is healthy."""
+        try:
+            if not self.engine:
+                return False
+            
+            with self.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return True
+            
+        except Exception as e:
+            logger.error(f"PGVector health check failed: {e}")
+            return False
+        
+    def _get_session(self) -> Session:
+        """Get a database session."""
+        if not self.SessionLocal:
+            raise RuntimeError("Provider not initialized")
+        return self.SessionLocal()
+    
+    async def store_document(self, document: Document) -> str:
+        """Store a document and return its ID."""
+        try:
+            session = self._get_session()
+            
+            # Document ID is always provided by client
+            db_doc = DocumentTable(
+                id=document.id,
+                namespace=document.namespace,
+                doc_type=document.doc_type.value,
+                source=document.source,
+                title=document.title,
+                content=document.content,
+                doc_metadata=json.dumps(document.metadata) if document.metadata else None
+            )
+            
+            session.add(db_doc)
+            session.commit()
+            return document.id
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Failed to store document: {e}")
+            raise
+        finally:
+            session.close()
+
+    async def store_chunks(self, chunks: List[DocumentChunk]) -> List[str]:
+        """Store document chunks with embeddings."""
+        try:
+            session = self._get_session()
+            chunk_ids = []
+            
+            for chunk in chunks:
+                # Chunk ID is always provided by client
+                db_chunk = ChunkTable(
+                    id=chunk.id,
+                    document_id=chunk.document_id,
+                    namespace=chunk.namespace,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    embedding=chunk.embedding,
+                    chunk_metadata=json.dumps(chunk.metadata) if chunk.metadata else None
+                )
+                session.add(db_chunk)
+                chunk_ids.append(chunk.id)
+            
+            session.commit()
+            return chunk_ids
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Failed to store chunks: {e}")
+            raise
+        finally:
+            session.close()
+
+    async def search_similar(self, 
+                           query_embedding: List[float], 
+                           filters: SearchFilters) -> List[SearchResult]:
+        """Search for similar chunks using vector similarity."""
+        try:
+            session = self._get_session()
+            
+            query = session.query(ChunkTable, DocumentTable).join(
+                DocumentTable, ChunkTable.document_id == DocumentTable.id
+            )
+            
+            # Apply namespace filter
+            if filters.namespaces:
+                query = query.filter(ChunkTable.namespace.in_(filters.namespaces))
+            
+            # Apply document type filter
+            if filters.doc_types:
+                doc_type_values = [dt.value for dt in filters.doc_types]
+                query = query.filter(DocumentTable.doc_type.in_(doc_type_values))
+            
+            # Note: All embeddings are now fixed at 4096 dimensions
+            
+            # Order by cosine similarity and limit
+            query = query.order_by(
+                ChunkTable.embedding.cosine_distance(query_embedding)
+            ).limit(filters.limit)
+            
+            results = []
+            for chunk_row, doc_row in query.all():
+                # Calculate similarity score (1 - cosine_distance)
+                distance_query = session.query(ChunkTable.embedding.cosine_distance(query_embedding)
+                    ).filter(ChunkTable.id == chunk_row.id)
+                distance = distance_query.scalar()
+                score = 1.0 - distance
+                                    
+                # Convert to Pydantic models
+                chunk = DocumentChunk(
+                    id=chunk_row.id,
+                    document_id=chunk_row.document_id,
+                    namespace=chunk_row.namespace,
+                    chunk_index=chunk_row.chunk_index,
+                    content=chunk_row.content,
+                    embedding=chunk_row.embedding.to_list(),
+                    metadata=safe_json_loads(chunk_row.chunk_metadata),
+                    created_at=chunk_row.created_at
+                )
+                
+                # Handle DocumentType conversion safely
+                try:
+                    doc_type = DocumentType(doc_row.doc_type)
+                except (ValueError, TypeError):
+                    doc_type = DocumentType.TEXT
+                
+                document = Document(
+                    id=doc_row.id,
+                    namespace=doc_row.namespace,
+                    doc_type=doc_type,
+                    source=doc_row.source,
+                    title=doc_row.title,
+                    content=doc_row.content,
+                    metadata=safe_json_loads(doc_row.doc_metadata),
+                    created_at=doc_row.created_at
+                )
+                
+                results.append(SearchResult(chunk=chunk, score=score, document=document))
+            
+            return results
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Search failed: {e}")
+            raise
+        finally:
+            session.close()
+
+    async def get_document(self, document_id: str) -> Optional[Document]:
+        """Retrieve a document by ID."""
+        try:
+            session = self._get_session()
+            
+            doc_row = session.query(DocumentTable).filter(
+                DocumentTable.id == document_id
+            ).first()
+            
+            if not doc_row:
+                return None
+            
+            # Handle DocumentType conversion safely
+            try:
+                doc_type = DocumentType(doc_row.doc_type)
+            except (ValueError, TypeError):
+                # If doc_type is not a valid enum value, default to a safe value
+                doc_type = DocumentType.TEXT
+            
+            # Parse metadata safely
+            metadata = safe_json_loads(doc_row.doc_metadata)
+            
+            return Document(
+                id=doc_row.id,
+                namespace=doc_row.namespace,
+                doc_type=doc_type,
+                source=doc_row.source,
+                title=doc_row.title,
+                content=doc_row.content,
+                metadata=metadata,
+                created_at=doc_row.created_at
+            )
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to get document: {e}")
+            raise
+        finally:
+            session.close()
+
+    async def get_chunks(self, document_id: str) -> List[DocumentChunk]:
+        """Get all chunks for a document."""
+        try:
+            session = self._get_session()
+            
+            chunk_rows = session.query(ChunkTable).filter(
+                ChunkTable.document_id == document_id
+            ).order_by(ChunkTable.chunk_index).all()
+            
+            chunks = []
+            for chunk_row in chunk_rows:
+                chunks.append(DocumentChunk(
+                    id=chunk_row.id,
+                    document_id=chunk_row.document_id,
+                    namespace=chunk_row.namespace,
+                    chunk_index=chunk_row.chunk_index,
+                    content=chunk_row.content,
+                    embedding=chunk_row.embedding.to_list(),
+                    metadata=safe_json_loads(chunk_row.chunk_metadata),
+                    created_at=chunk_row.created_at
+                ))
+            
+            return chunks
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to get chunks: {e}")
+            raise
+        finally:
+            session.close()
+
+    async def delete_document(self, document_id: str) -> bool:
+        """Delete a document and its chunks."""
+        try:
+            session = self._get_session()
+            
+            doc = session.query(DocumentTable).filter(
+                DocumentTable.id == document_id
+            ).first()
+            
+            if doc:
+                session.delete(doc)  # Cascades to chunks
+                session.commit()
+                return True
+            return False
+            
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Failed to delete document: {e}")
+            raise
+        finally:
+            session.close()
+
+    async def list_documents(self, namespace: str) -> List[Document]:
+        """List documents in a namespace."""
+        try:
+            session = self._get_session()
+            
+            doc_rows = session.query(DocumentTable).filter(
+                DocumentTable.namespace == namespace
+            ).order_by(DocumentTable.created_at.desc()).all()
+            
+            documents = []
+            for doc_row in doc_rows:
+                # Handle DocumentType conversion safely
+                try:
+                    doc_type = DocumentType(doc_row.doc_type)
+                except (ValueError, TypeError):
+                    doc_type = DocumentType.TEXT
+                
+                documents.append(Document(
+                    id=doc_row.id,
+                    namespace=doc_row.namespace,
+                    doc_type=doc_type,
+                    source=doc_row.source,
+                    title=doc_row.title,
+                    content=doc_row.content,
+                    metadata=safe_json_loads(doc_row.doc_metadata),
+                    created_at=doc_row.created_at
+                ))
+            
+            return documents
+            
+        except SQLAlchemyError as e:
+            logger.error(f"Failed to list documents: {e}")
+            raise
+        finally:
+            session.close()

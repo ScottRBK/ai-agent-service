@@ -56,7 +56,6 @@ def print_usage():
     print("  python examples/run_agent.py mcp_agent azure_openai_cc")
     print()
 
-
 def validate_agent_config(agent_id: str) -> bool:
     """Check if the agent configuration exists."""
     try:
@@ -67,7 +66,6 @@ def validate_agent_config(agent_id: str) -> bool:
         logger.error(f"Error validating agent {agent_id}: {e}")
         return False
 
-
 def validate_provider(provider_id: str) -> bool:
     """Check if the provider is available."""
     try:
@@ -77,7 +75,6 @@ def validate_provider(provider_id: str) -> bool:
     except Exception as e:
         logger.error(f"Error validating provider {provider_id}: {e}")
         return False
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run AI agents with custom settings")

@@ -15,7 +15,7 @@ from openai import AsyncAzureOpenAI
 from datetime import datetime
 from pydantic import ValidationError
 import json
-from typing import Optional, AsyncGenerator
+from typing import Optional, AsyncGenerator, List
 
 class AzureOpenAIProvider(BaseProvider):
     def __init__(self, config: AzureOpenAIConfig):
@@ -320,3 +320,25 @@ class AzureOpenAIProvider(BaseProvider):
                 response_tools.append(response_tool)
         
         return response_tools
+    
+    async def embed(self, text: str, model: str) -> list[float]:
+        """Embed text using the provider."""
+        response = await self.client.embeddings.create(
+            model=model,
+            input=text
+        )
+        
+        # Validate response structure
+        if not hasattr(response, 'data') or response.data is None:
+            raise AttributeError("Response missing 'data' attribute")
+        
+        if len(response.data) == 0:
+            raise IndexError("Response data is empty")
+        
+        if not hasattr(response.data[0], 'embedding') or response.data[0].embedding is None:
+            raise AttributeError("Response data missing 'embedding' attribute")
+        
+        return response.data[0].embedding
+    
+    async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
+        return await super().rerank(model, query, candidates)

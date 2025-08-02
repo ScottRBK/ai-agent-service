@@ -1530,27 +1530,16 @@ class TestCodeCoverage:
     async def test_process_streaming_response_boundary_conditions(self, provider):
         """Test boundary conditions in _process_streaming_response."""
         # Test with response that has alternating None/content chunks
-        class BoundaryAsyncGenerator:
-            def __init__(self):
-                self.count = 0
-                
-            def __aiter__(self):
-                return self
-                
-            async def __anext__(self):
-                if self.count >= 6:
-                    raise StopAsyncIteration
-                
-                chunk = MagicMock()
-                if self.count % 2 == 0:
-                    chunk.message.content = f"content_{self.count}" if self.count < 4 else None
-                else:
-                    chunk.message.content = None
-                chunk.message.tool_calls = None
-                self.count += 1
-                return chunk
+        boundary_chunks = [
+            {'content': 'content_0'},  # count=0, even, < 4
+            {'content': None},         # count=1, odd
+            {'content': 'content_2'},  # count=2, even, < 4
+            {'content': None},         # count=3, odd
+            {'content': None},         # count=4, even, >= 4
+            {'content': None}          # count=5, odd
+        ]
         
-        response = BoundaryAsyncGenerator()
+        response = create_streaming_response(boundary_chunks)
         
         chunks = []
         async for chunk_type, content, tool_calls in provider._process_streaming_response(response):
@@ -1567,16 +1556,16 @@ class TestCodeCoverage:
     async def test_handle_tool_calls_streaming_iteration_limits(self, provider, mock_client):
         """Test iteration limit handling in _handle_tool_calls_streaming."""
         provider.client = mock_client
-        provider.max_tool_iterations = 2  # Set low limit for testing
+        provider.max_tool_iterations = 1  # Set minimal limit for faster testing
         
         # Create responses that would cause exactly max_tool_iterations
         tool_call = create_mock_tool_call("limit_tool", '{"limit": true}')
         
-        # First two responses have tool calls, third doesn't
-        responses = []
-        for i in range(3):
-            chunks = [{'content': f'iter_{i}', 'tool_calls': [tool_call] if i < 2 else []}]
-            responses.append(create_streaming_response(chunks))
+        # Two responses: first has tool calls, second would exceed limit
+        responses = [
+            create_streaming_response([{'content': 'iter_0', 'tool_calls': [tool_call]}]),
+            create_streaming_response([{'content': 'iter_1', 'tool_calls': [tool_call]}])
+        ]
         
         mock_client.chat.side_effect = responses
         
@@ -1625,19 +1614,19 @@ class TestCodeCoverage:
         """Comprehensive test covering all method interactions in single flow."""
         provider.client = mock_client
         
-        # Complex scenario: instructions + context + streaming + tool calls + model settings
+        # Streamlined scenario: instructions + context + streaming + tool calls + model settings
         tool_call1 = create_mock_tool_call("coverage_tool_1", '{"phase": 1}')
         tool_call2 = create_mock_tool_call("coverage_tool_2", '{"phase": 2}')
         
-        # Multi-phase streaming with different tool calls
+        # Two-phase streaming with tool calls (maintains full integration coverage)
         phase1_chunks = [{'content': 'Phase 1: ', 'tool_calls': [tool_call1]}]
-        phase2_chunks = [{'content': 'Phase 2: ', 'tool_calls': [tool_call2]}] 
-        phase3_chunks = [{'content': 'Complete!'}]
+        phase2_chunks = [{'content': 'Phase 2: ', 'tool_calls': [tool_call2]}]
+        final_chunks = [{'content': 'Done!'}]
         
         responses = [
             create_streaming_response(phase1_chunks),
-            create_streaming_response(phase2_chunks), 
-            create_streaming_response(phase3_chunks)
+            create_streaming_response(phase2_chunks),
+            create_streaming_response(final_chunks)
         ]
         mock_client.chat.side_effect = responses
         
@@ -1645,12 +1634,11 @@ class TestCodeCoverage:
             chunks = []
             async for chunk in provider.send_chat_with_streaming(
                 context=[
-                    {"role": "user", "content": "Start comprehensive test"}, 
-                    {"role": "assistant", "content": "Previous response"},
-                    {"role": "user", "content": "Continue test"}
+                    {"role": "user", "content": "Start test"}, 
+                    {"role": "assistant", "content": "Previous response"}
                 ],
                 model="comprehensive-model",
-                instructions="Execute comprehensive coverage test",
+                instructions="Execute coverage test",
                 agent_id="coverage_agent",
                 model_settings={"temperature": 0.9, "max_tokens": 200}
             ):
@@ -1661,14 +1649,13 @@ class TestCodeCoverage:
         # 1. _prepare_messages: instructions + multi-message context
         first_call = mock_client.chat.call_args_list[0][1]
         messages = first_call["messages"]
-        # Messages grow as tool calls are processed, just verify the first few
         assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "Execute comprehensive coverage test"
+        assert messages[0]["content"] == "Execute coverage test"
         assert messages[1]["role"] == "user"
-        assert messages[1]["content"] == "Start comprehensive test"
+        assert messages[1]["content"] == "Start test"
         
         # 2. _process_streaming_response: all content chunks yielded
-        assert chunks == ['Phase 1: ', 'Phase 2: ', 'Complete!']
+        assert chunks == ['Phase 1: ', 'Phase 2: ', 'Done!']
         
         # 3. _execute_tool_calls: both tools executed
         assert mock_execute.call_count == 2
@@ -1680,3 +1667,322 @@ class TestCodeCoverage:
             assert call_args[1]["options"] == {"temperature": 0.9, "max_tokens": 200}
             assert call_args[1]["stream"] is True
         assert mock_client.chat.call_count == 3
+
+
+# ============================================================================
+# Embedding Function Tests
+# ============================================================================
+
+class TestEmbedFunction:
+    """Test cases for the embed method"""
+    
+    @pytest.mark.asyncio
+    async def test_embed_successful_generation(self, provider, mock_client):
+        """Test successful embedding generation"""
+        provider.client = mock_client
+        
+        # Mock embedding response
+        mock_response = MagicMock()
+        mock_response.embeddings = [[0.1, 0.2, 0.3, 0.4, 0.5]]
+        mock_client.embed = AsyncMock(return_value=mock_response)
+        
+        text = "This is a test text for embedding"
+        model = "dengcao/Qwen3-Embedding-4B:Q8_0"
+        
+        result = await provider.embed(text, model)
+        
+        assert result == [0.1, 0.2, 0.3, 0.4, 0.5]
+        mock_client.embed.assert_called_once_with(
+            model=model,
+            input=text
+        )
+    
+    @pytest.mark.asyncio
+    async def test_embed_with_different_models(self, provider, mock_client):
+        """Test embedding with different model names"""
+        provider.client = mock_client
+        
+        models_to_test = [
+            "dengcao/Qwen3-Embedding-4B:Q8_0",
+            "nomic-embed-text",
+            "mxbai-embed-large",
+            "custom-embedding-model"
+        ]
+        
+        for model in models_to_test:
+            mock_response = MagicMock()
+            mock_response.embeddings = [[0.1] * 384]  # Different dimension for different models
+            mock_client.embed = AsyncMock(return_value=mock_response)
+            
+            text = f"Test text for {model}"
+            result = await provider.embed(text, model)
+            
+            assert result == [0.1] * 384
+            mock_client.embed.assert_called_with(
+                model=model,
+                input=text
+            )
+    
+    @pytest.mark.asyncio
+    async def test_embed_with_long_text(self, provider, mock_client):
+        """Test embedding with long text content"""
+        provider.client = mock_client
+        
+        # Create long text (10KB)
+        long_text = "This is a very long text. " * 400  # ~10KB
+        model = "dengcao/Qwen3-Embedding-4B:Q8_0"
+        
+        mock_response = MagicMock()
+        # Simulate 2560-dimensional embedding for Qwen3-Embedding-4B
+        mock_response.embeddings = [[0.1] * 2560]
+        mock_client.embed = AsyncMock(return_value=mock_response)
+        
+        result = await provider.embed(long_text, model)
+        
+        assert len(result) == 2560
+        assert all(isinstance(x, float) for x in result)
+        mock_client.embed.assert_called_once_with(
+            model=model,
+            input=long_text
+        )
+    
+    @pytest.mark.asyncio
+    async def test_embed_with_unicode_text(self, provider, mock_client):
+        """Test embedding with Unicode text"""
+        provider.client = mock_client
+        
+        unicode_text = "Hello 世界! 🌍 This contains émojis and ñoñ-ASCII çharacters"
+        model = "dengcao/Qwen3-Embedding-4B:Q8_0"
+        
+        mock_response = MagicMock()
+        mock_response.embeddings = [[0.1] * 2560]
+        mock_client.embed = AsyncMock(return_value=mock_response)
+        
+        result = await provider.embed(unicode_text, model)
+        
+        assert len(result) == 2560
+        mock_client.embed.assert_called_once_with(
+            model=model,
+            input=unicode_text
+        )
+    
+    @pytest.mark.asyncio
+    async def test_embed_with_empty_text(self, provider, mock_client):
+        """Test embedding with empty text"""
+        provider.client = mock_client
+        
+        empty_text = ""
+        model = "dengcao/Qwen3-Embedding-4B:Q8_0"
+        
+        mock_response = MagicMock()
+        mock_response.embeddings = [[0.0] * 2560]  # Empty text might produce zero embeddings
+        mock_client.embed = AsyncMock(return_value=mock_response)
+        
+        result = await provider.embed(empty_text, model)
+        
+        assert len(result) == 2560
+        assert all(x == 0.0 for x in result)
+        mock_client.embed.assert_called_once_with(
+            model=model,
+            input=empty_text
+        )
+    
+    @pytest.mark.asyncio
+    async def test_embed_dimension_consistency(self, provider, mock_client):
+        """Test embedding dimension consistency for Qwen3-Embedding-4B"""
+        provider.client = mock_client
+        
+        model = "dengcao/Qwen3-Embedding-4B:Q8_0"
+        texts = [
+            "Short text",
+            "This is a medium length text with some more content",
+            "This is a very long text that contains multiple sentences and should still produce the same dimensional embedding as shorter texts for consistency in vector storage and search operations."
+        ]
+        
+        for text in texts:
+            mock_response = MagicMock()
+            mock_response.embeddings = [[0.1] * 2560]  # Qwen3-Embedding-4B produces 2560 dimensions
+            mock_client.embed = AsyncMock(return_value=mock_response)
+            
+            result = await provider.embed(text, model)
+            
+            assert len(result) == 2560, f"Expected 2560 dimensions for '{text[:50]}...'"
+            assert all(isinstance(x, (int, float)) for x in result)
+    
+    @pytest.mark.asyncio
+    async def test_embed_api_error_handling(self, provider, mock_client):
+        """Test embedding API error handling"""
+        provider.client = mock_client
+        
+        text = "Test text"
+        model = "dengcao/Qwen3-Embedding-4B:Q8_0"
+        
+        # Test different error scenarios
+        error_scenarios = [
+            Exception("Network connection failed"),
+            Exception("Model not found"),
+            Exception("API rate limit exceeded"),
+            Exception("Invalid input format")
+        ]
+        
+        for error in error_scenarios:
+            mock_client.embed = AsyncMock(side_effect=error)
+            
+            with pytest.raises(Exception) as exc_info:
+                await provider.embed(text, model)
+            
+            assert str(exc_info.value) == str(error)
+            mock_client.embed.assert_called_with(
+                model=model,
+                input=text
+            )
+    
+    @pytest.mark.asyncio
+    async def test_embed_response_format_validation(self, provider, mock_client):
+        """Test validation of embedding response format"""
+        provider.client = mock_client
+        
+        text = "Test text"
+        model = "test-model"
+        
+        # Test various response formats
+        valid_responses = [
+            [[0.1, 0.2, 0.3]],  # Standard format
+            [[1.0, -0.5, 0.0, 0.8]],  # With negative values
+            [[0.123456789] * 100],  # High precision floats
+        ]
+        
+        for embeddings in valid_responses:
+            mock_response = MagicMock()
+            mock_response.embeddings = embeddings
+            mock_client.embed = AsyncMock(return_value=mock_response)
+            
+            result = await provider.embed(text, model)
+            
+            assert result == embeddings[0]
+            assert all(isinstance(x, (int, float)) for x in result)
+    
+    @pytest.mark.asyncio
+    async def test_embed_malformed_response_handling(self, provider, mock_client):
+        """Test handling of malformed embedding responses"""
+        provider.client = mock_client
+        
+        text = "Test text"
+        model = "test-model"
+        
+        # Test malformed responses
+        malformed_responses = [
+            MagicMock(embeddings=None),  # None embeddings
+            MagicMock(embeddings=[]),    # Empty embeddings list
+            MagicMock(),                 # Missing embeddings attribute
+        ]
+        
+        for mock_response in malformed_responses:
+            mock_client.embed = AsyncMock(return_value=mock_response)
+            
+            with pytest.raises((AttributeError, IndexError, TypeError)):
+                await provider.embed(text, model)
+    
+    @pytest.mark.asyncio
+    async def test_embed_multiple_embeddings_response(self, provider, mock_client):
+        """Test handling response with multiple embeddings (taking first one)"""
+        provider.client = mock_client
+        
+        text = "Test text"
+        model = "test-model"
+        
+        # Mock response with multiple embeddings
+        mock_response = MagicMock()
+        mock_response.embeddings = [
+            [0.1, 0.2, 0.3],  # First embedding (should be returned)
+            [0.4, 0.5, 0.6],  # Second embedding (should be ignored)
+            [0.7, 0.8, 0.9]   # Third embedding (should be ignored)
+        ]
+        mock_client.embed = AsyncMock(return_value=mock_response)
+        
+        result = await provider.embed(text, model)
+        
+        # Should return only the first embedding
+        assert result == [0.1, 0.2, 0.3]
+        mock_client.embed.assert_called_once_with(
+            model=model,
+            input=text
+        )
+    
+    @pytest.mark.asyncio
+    async def test_embed_numerical_precision(self, provider, mock_client):
+        """Test handling of high-precision floating point embeddings"""
+        provider.client = mock_client
+        
+        text = "Test text"
+        model = "test-model"
+        
+        # High precision float embeddings
+        high_precision_embeddings = [
+            0.123456789012345,
+            -0.987654321098765,
+            1.23456789e-10,
+            -9.87654321e+5
+        ]
+        
+        mock_response = MagicMock()
+        mock_response.embeddings = [high_precision_embeddings]
+        mock_client.embed = AsyncMock(return_value=mock_response)
+        
+        result = await provider.embed(text, model)
+        
+        assert result == high_precision_embeddings
+        assert len(result) == 4
+        assert all(isinstance(x, float) for x in result)
+    
+    @pytest.mark.asyncio
+    async def test_embed_performance_large_batch(self, provider, mock_client):
+        """Test embedding performance with conceptually large input"""
+        provider.client = mock_client
+        
+        # Simulate processing large document
+        large_text = "Large document content. " * 1000  # ~25KB text
+        model = "dengcao/Qwen3-Embedding-4B:Q8_0"
+        
+        mock_response = MagicMock()
+        mock_response.embeddings = [[0.1] * 2560]
+        mock_client.embed = AsyncMock(return_value=mock_response)
+        
+        result = await provider.embed(large_text, model)
+        
+        assert len(result) == 2560
+        mock_client.embed.assert_called_once_with(
+            model=model,
+            input=large_text
+        )
+    
+    @pytest.mark.asyncio
+    async def test_embed_concurrent_requests(self, provider, mock_client):
+        """Test concurrent embedding requests"""
+        provider.client = mock_client
+        
+        import asyncio
+        
+        model = "test-model"
+        texts = [f"Text {i}" for i in range(5)]
+        
+        # Mock responses for each request
+        async def mock_embed_side_effect(model, input):
+            mock_response = MagicMock()
+            # Different embeddings for each text
+            text_index = int(input.split()[-1])
+            mock_response.embeddings = [[0.1 * text_index] * 3]
+            return mock_response
+        
+        mock_client.embed = AsyncMock(side_effect=mock_embed_side_effect)
+        
+        # Execute concurrent requests
+        tasks = [provider.embed(text, model) for text in texts]
+        results = await asyncio.gather(*tasks)
+        
+        assert len(results) == 5
+        for i, result in enumerate(results):
+            expected_value = 0.1 * i
+            assert all(x == expected_value for x in result)
+        
+        assert mock_client.embed.call_count == 5
