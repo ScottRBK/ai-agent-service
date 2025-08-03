@@ -52,7 +52,6 @@ class ChunkTable(Base):
     
     document = relationship("DocumentTable", back_populates="chunks")
 
-
 hnsw_index = Index(
     'ix_chunks_embedding_hnsw',
     ChunkTable.embedding,

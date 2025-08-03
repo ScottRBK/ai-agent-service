@@ -69,7 +69,9 @@ class TestPostgreSQLMemoryResource:
                 await memory_resource.initialize()
                 
                 assert memory_resource.initialized is True
-                mock_create_engine.assert_called_once_with(memory_resource.connection_string)
+                # Expect the connection string to be modified to use psycopg dialect
+                expected_connection_string = memory_resource.connection_string.replace('postgresql://', 'postgresql+psycopg://', 1)
+                mock_create_engine.assert_called_once_with(expected_connection_string)
     
     @pytest.mark.asyncio
     async def test_initialize_failure(self, memory_resource):

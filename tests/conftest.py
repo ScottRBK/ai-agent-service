@@ -146,12 +146,3 @@ def mock_tool_manager():
         mock_tool_manager.return_value = mock_instance
         yield mock_tool_manager
 
-@pytest.fixture(autouse=True)
-def mock_resource_manager():
-    """Automatically mock resource manager to prevent real resource calls during tests."""
-    with patch('app.core.agents.agent_resource_manager.AgentResourceManager') as mock_resource_manager:
-        mock_instance = AsyncMock()
-        mock_instance.get_model_config.return_value = ("mock-model", {})
-        mock_instance.get_memory_resource = AsyncMock(return_value=None)
-        mock_resource_manager.return_value = mock_instance
-        yield mock_resource_manager

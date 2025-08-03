@@ -13,7 +13,7 @@ from typing import AsyncGenerator
 import psycopg
 from dotenv import load_dotenv
 
-from app.core.resources.memory import PostgreSQLMemoryResource
+from app.core.resources.memory import PostgreSQLMemoryResource, MemoryEntryTable
 from app.models.resources.memory import MemoryEntry
 from app.config.settings import settings
 
@@ -109,13 +109,13 @@ class TestMemoryResourceIntegration:
             entry_metadata={"test_type": "integration", "timestamp": datetime.now(timezone.utc).isoformat()}
         )
     
-    @pytest.fixture(autouse=True)
+    @pytest_asyncio.fixture(autouse=True)
     async def cleanup_database(self, memory_resource):
         """Clean up database before each test."""
         # Clear all memory entries
         db_session = memory_resource._get_session()
         try:
-            db_session.query(memory_resource.MemoryEntryTable).delete()
+            db_session.query(MemoryEntryTable).delete()
             db_session.commit()
         finally:
             db_session.close()

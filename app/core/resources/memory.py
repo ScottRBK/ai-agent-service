@@ -62,7 +62,12 @@ class PostgreSQLMemoryResource(BaseResource):
     async def initialize(self) -> None:
         """Initialize PostgreSQL connection and create tables."""
         try:
-            self.engine = create_engine(self.connection_string)
+            # Use psycopg (version 3) dialect instead of psycopg2
+            connection_string = self.connection_string
+            if connection_string.startswith('postgresql://'):
+                connection_string = connection_string.replace('postgresql://', 'postgresql+psycopg://', 1)
+            
+            self.engine = create_engine(connection_string)
             self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
             
             # Create tables

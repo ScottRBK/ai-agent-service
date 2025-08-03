@@ -5,7 +5,6 @@ Simple Prompt Manager that reads from agent configuration.
 import os
 from typing import Optional
 from app.core.agents.agent_tool_manager import AgentToolManager
-from app.core.agents.agent_resource_manager import AgentResourceManager
 from app.utils.logging import logger
 
 
@@ -17,23 +16,21 @@ class PromptManager:
     def __init__(self, agent_id: str):
         self.agent_id = agent_id
         self.agent_tool_manager = AgentToolManager(agent_id)
-        self.agent_resource_manager = AgentResourceManager(agent_id)
     
     def get_system_prompt(self) -> str:
         """Get the system prompt for the agent from agent configuration."""
-        tool_config = self.agent_tool_manager.config
-        resource_config = self.agent_resource_manager.config
+        config = self.agent_tool_manager.config
         
-        if not tool_config:
+        if not config:
             return self.get_default_prompt()
         
         # Check if using external prompt file
-        prompt_file = tool_config.get("system_prompt_file")
+        prompt_file = config.get("system_prompt_file")
         if prompt_file:
             return self.load_prompt_from_file(prompt_file)
         
         # Use inline prompt
-        return tool_config.get("system_prompt", self.get_default_prompt())
+        return config.get("system_prompt", self.get_default_prompt())
     
     def load_prompt_from_file(self, file_path: str) -> str:
         """Load prompt from external file."""
@@ -117,8 +114,8 @@ class PromptManager:
     
     def _get_resource_info(self) -> str:
         """Get resource information for the prompt including names and descriptions."""
-        resource_config = self.agent_resource_manager.config
-        available_resources = resource_config.get("resources", [])
+        config = self.agent_tool_manager.config
+        available_resources = config.get("resources", [])
         
         if not available_resources:
             return ""

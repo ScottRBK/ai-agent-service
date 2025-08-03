@@ -23,7 +23,7 @@ class TestAPIAgentInitialization:
         assert agent.requested_model is None
         assert agent.requested_model_settings is None
         assert agent.initialized is False
-        assert agent.memory_resource is None
+        assert agent.memory is None
         assert agent.provider is None
     
     def test_init_with_custom_parameters(self):
@@ -75,7 +75,7 @@ class TestAPIAgentMemoryManagement:
     async def test_get_conversation_history_no_memory(self):
         """Test getting conversation history when no memory resource is available."""
         agent = APIAgent("test_agent")
-        agent.memory_resource = None
+        agent.memory = None
         
         history = await agent.get_conversation_history()
         
@@ -95,7 +95,7 @@ class TestAPIAgentMemoryManagement:
         mock_memory.get_memories.return_value = mock_memories
         # Mock get_session_summary to return None (no summary)
         mock_memory.get_session_summary.return_value = None
-        agent.memory_resource = mock_memory
+        agent.memory = mock_memory
         
         history = await agent.get_conversation_history()
         
@@ -119,7 +119,7 @@ class TestAPIAgentMemoryManagement:
         
         # Mock memory resource
         mock_memory = AsyncMock()
-        agent.memory_resource = mock_memory
+        agent.memory = mock_memory
         
         await agent.save_memory("user", "Test message")
         
@@ -136,7 +136,7 @@ class TestAPIAgentMemoryManagement:
     async def test_save_memory_no_resource(self):
         """Test saving memory when no memory resource is available."""
         agent = APIAgent("test_agent")
-        agent.memory_resource = None
+        agent.memory = None
         
         # Should not raise any exception
         await agent.save_memory("user", "Test message")
@@ -148,19 +148,19 @@ class TestAPIAgentMemoryManagement:
         
         # Mock memory resource
         mock_memory = AsyncMock()
-        agent.memory_resource = mock_memory
+        agent.memory = mock_memory
         
         await agent.clear_conversation()
         
-        mock_memory.clear_session_memories.assert_called_once_with(
-            "default_user", "default_session", "test_agent"
+        mock_memory.clear_session.assert_called_once_with(
+            "default_user", "default_session"
         )
     
     @pytest.mark.asyncio
     async def test_clear_conversation_no_resource(self):
         """Test clearing conversation when no memory resource is available."""
         agent = APIAgent("test_agent")
-        agent.memory_resource = None
+        agent.memory = None
         
         # Should not raise any exception
         await agent.clear_conversation()
@@ -202,7 +202,7 @@ class TestAPIAgentEdgeCases:
         # Mock memory resource that raises exception
         mock_memory = AsyncMock()
         mock_memory.get_memories.side_effect = Exception("Memory error")
-        agent.memory_resource = mock_memory
+        agent.memory = mock_memory
         
         # BaseAgent now catches and logs errors, returning empty list
         history = await agent.get_conversation_history()
@@ -216,7 +216,7 @@ class TestAPIAgentEdgeCases:
             await agent.save_memory("user", "Test message")
         
         # Test clear_conversation with error
-        mock_memory.clear_session_memories.side_effect = Exception("Clear error")
+        mock_memory.clear_session.side_effect = Exception("Clear error")
         
         # Should propagate clear errors (actual behavior)
         with pytest.raises(Exception, match="Clear error"):
@@ -349,7 +349,7 @@ async def test_chat_stream_saves_memory(agent, mock_provider):
     agent.model = "test-model"
     agent.system_prompt = "Be helpful"
     agent.model_settings = {}
-    agent.memory_resource = MagicMock()
+    agent.memory = MagicMock()
     
     # Create a proper async generator function
     async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
@@ -435,7 +435,7 @@ async def test_chat_stream_with_memory_compression(agent, mock_provider):
     agent.model = "test-model"
     agent.system_prompt = "Be helpful"
     agent.model_settings = {}
-    agent.memory_resource = MagicMock()
+    agent.memory = MagicMock()
     
     # Create a proper async generator function
     async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
@@ -465,7 +465,7 @@ async def test_chat_stream_without_memory_compression(agent, mock_provider):
     agent.model = "test-model"
     agent.system_prompt = "Be helpful"
     agent.model_settings = {}
-    agent.memory_resource = None  # No memory resource
+    agent.memory = None  # No memory resource
     
     # Create a proper async generator function
     async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):
@@ -517,7 +517,7 @@ async def test_chat_stream_cleans_response_for_memory(agent, mock_provider):
     agent.model = "test-model"
     agent.system_prompt = "Be helpful"
     agent.model_settings = {}
-    agent.memory_resource = MagicMock()
+    agent.memory = MagicMock()
     
     # Response with think tags that should be cleaned
     # Create a proper async generator function
@@ -552,7 +552,7 @@ async def test_chat_stream_empty_response(agent, mock_provider):
     agent.model = "test-model"
     agent.system_prompt = "Be helpful"
     agent.model_settings = {}
-    agent.memory_resource = MagicMock()  # Set up memory resource so save_memory is called
+    agent.memory = MagicMock()  # Set up memory resource so save_memory is called
     
     # Create a proper async generator function for empty response
     async def mock_streaming_generator(context, model, instructions, tools=None, agent_id=None, model_settings=None):

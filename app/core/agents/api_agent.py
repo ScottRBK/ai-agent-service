@@ -64,11 +64,10 @@ class APIAgent(BaseAgent):
     
     async def clear_conversation(self):
         """Clear conversation history for current session"""
-        if self.memory_resource:
-            await self.memory_resource.clear_session_memories(
+        if self.memory:
+            await self.memory.clear_session(
                 self.user_id, 
-                self.session_id, 
-                self.agent_id
+                self.session_id
             )
 
     async def chat_stream(self, user_input: str) -> AsyncGenerator[str, None]:
@@ -81,7 +80,7 @@ class APIAgent(BaseAgent):
         
         # Add user message
         conversation_history.append({"role": "user", "content": user_input})
-        if self.memory_resource:
+        if self.memory:
             await self.save_memory("user", user_input)
         
         # Stream response from provider

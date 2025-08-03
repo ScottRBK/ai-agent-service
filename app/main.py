@@ -9,11 +9,9 @@ from app.utils.logging import logger
 from app.api.routes.health import router as health_router
 from app.api.routes.agents import router as agents_router
 from app.api.routes.openai_compatible import router as openai_router
-from app.core.resources.manager import ResourceManager
 from app.core.providers.manager import ProviderManager
 
-# Global resource managers
-resource_manager = ResourceManager()
+# Global provider manager
 provider_manager = ProviderManager()
 
 @asynccontextmanager
@@ -29,9 +27,6 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down AI Agent Service...")
-    
-    # Cleanup all resources
-    await resource_manager.cleanup_all()
     
     # Clear provider caches
     for provider_info in provider_manager.providers.values():

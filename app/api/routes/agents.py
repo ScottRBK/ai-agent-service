@@ -3,7 +3,6 @@ from typing import List, Optional, Dict, Any
 from app.models.agents import ChatRequest, ChatResponse, AgentInfo, ConversationHistory, ChatMessage
 from app.core.agents.api_agent import APIAgent
 from app.core.agents.agent_tool_manager import AgentToolManager
-from app.core.agents.agent_resource_manager import AgentResourceManager
 from app.utils.logging import logger
 from datetime import datetime
 import json
@@ -15,8 +14,6 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 def get_agent_tool_manager(agent_id: str):
     return AgentToolManager(agent_id)
 
-def get_agent_resource_manager(agent_id: str):
-    return AgentResourceManager(agent_id)
 
 def load_agent_configs() -> List[Dict[str, Any]]:
     """Load all agent configurations from agent_config.json."""
@@ -124,8 +121,7 @@ async def get_agent_info(agent_id: str):
 async def chat_with_agent(
     agent_id: str,
     request: ChatRequest,
-    agent_tool_manager: AgentToolManager = Depends(get_agent_tool_manager),
-    agent_resource_manager: AgentResourceManager = Depends(get_agent_resource_manager)
+    agent_tool_manager: AgentToolManager = Depends(get_agent_tool_manager)
 ):
     """Send a message to an agent and get response"""
     try:

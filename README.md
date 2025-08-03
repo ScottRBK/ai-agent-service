@@ -28,9 +28,12 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 * **Environment Configuration** - Flexible settings with environment variable support
 * **Hot Reload** - Development mode with automatic code reloading
 
-### 🧠 **Memory & Persistence**
+### 🧠 **Memory & Knowledge Management**
 * **Memory Persistence** - PostgreSQL-based conversation history with automatic cleanup
 * **Memory Compression** - Intelligent conversation history management with AI-powered summarization
+* **Knowledge Base** - Vector-based RAG system with document ingestion, semantic search, and reranking
+* **Vector Storage** - Pluggable vector provider architecture with PGVector implementation
+* **Document Chunking** - Multiple strategies for optimal document processing (simple, semantic, token-aware)
 * **Response Processing** - Automatic response cleaning and formatting for memory storage
 
 ### 🧪 **Testing & Evaluation**
@@ -94,9 +97,8 @@ ai-agent-service/
 │   │       └── openai_compatible.py   # OpenAI-compatible API with streaming
 │   ├── core/
 │   │   ├── agents/
-│   │   │   ├── base_agent.py            # Base agent class with common functionality
+│   │   │   ├── base_agent.py            # Base agent class with direct resource composition
 │   │   │   ├── agent_tool_manager.py    # Agent tool filtering with fastmcp
-│   │   │   ├── agent_resource_manager.py # Agent resource management
 │   │   │   ├── prompt_manager.py        # System prompt management
 │   │   │   ├── cli_agent.py             # CLI agent implementation (inherits from BaseAgent)
 │   │   │   ├── api_agent.py             # API agent implementation with streaming (inherits from BaseAgent)
@@ -108,9 +110,18 @@ ai-agent-service/
 │   │   │   └── ollama.py                # Ollama provider with streaming
 │   │   ├── resources/
 │   │   │   ├── base.py                  # Base resource interface
-│   │   │   ├── manager.py               # Global resource management
 │   │   │   ├── memory.py                # PostgreSQL memory resource
-│   │   │   └── memory_compression_manager.py # Memory compression logic
+│   │   │   ├── memory_compression_manager.py # Memory compression logic
+│   │   │   ├── knowledge_base.py        # Vector-based knowledge base with RAG capabilities
+│   │   │   ├── vector_providers/        # Vector storage providers
+│   │   │   │   ├── base.py              # Vector provider interface
+│   │   │   │   └── pgvector_provider.py # PostgreSQL + pgvector implementation
+│   │   │   └── chunking/                # Document chunking strategies
+│   │   │       ├── base.py              # Chunking strategy interface
+│   │   │       ├── simple.py            # Basic text splitting
+│   │   │       ├── semantic.py          # AI-powered semantic boundaries
+│   │   │       ├── token_aware.py       # Token-conscious splitting
+│   │   │       └── document_specific.py # Format-aware chunking
 │   │   └── tools/
 │   │       ├── tool_registry.py         # Tool management
 │   │       └── function_calls/          # Built-in tools
@@ -119,7 +130,8 @@ ai-agent-service/
 │   ├── models/
 │   │   ├── agents.py                    # Agent API models
 │   │   └── resources/
-│   │       └── memory.py                # Memory data models
+│   │       ├── memory.py                # Memory data models
+│   │       └── knowledge_base.py        # Knowledge base data models
 │   └── utils/
 │       ├── logging.py                   # Logging configuration
 │       └── chat_utils.py                # Response cleaning utilities
@@ -200,6 +212,8 @@ The service provides a comprehensive agent framework with:
 - **Agent-Specific Tool Filtering**: Granular control over tool access per agent
 - **MCP Integration**: HTTP and command-based Model Context Protocol servers
 - **Memory Management**: PostgreSQL-based conversation persistence with compression
+- **Knowledge Base System**: Vector-based RAG with document ingestion, semantic search, and reranking
+- **Direct Resource Composition**: Simplified architecture with agents managing their own resources
 - **Dynamic Configuration**: Runtime model and parameter overrides
 
 For detailed agent configuration, MCP server setup, and provider information, see [Usage Examples](docs/examples.md).
@@ -268,9 +282,11 @@ For detailed testing examples and evaluation framework documentation, see [Evalu
 
 The service uses a modular architecture with clean separation of concerns:
 
-- **BaseAgent Architecture**: Unified agent foundation with inheritance
-- **Provider Abstraction**: Support for multiple AI providers  
+- **BaseAgent Architecture**: Unified agent foundation with direct resource composition
+- **Provider Abstraction**: Support for multiple AI providers with embedding and reranking capabilities
+- **Resource System**: Direct resource management with memory and knowledge base support
 - **Tool System**: Plugin-based MCP and function tools
+- **Vector Storage**: Extensible vector provider architecture with PostgreSQL integration
 - **Hot Reload**: Development mode with automatic code reloading
 
 For detailed development patterns, custom agent creation, and code examples, see [Usage Examples](docs/examples.md).
@@ -279,7 +295,8 @@ For detailed development patterns, custom agent creation, and code examples, see
 
 - **FastAPI** - Modern async web framework with automatic API documentation
 - **FastMCP** - Model Context Protocol integration with HTTP and command support
-- **PostgreSQL** - Conversation memory persistence and management
+- **PostgreSQL** - Conversation memory persistence, vector storage, and knowledge base management
+- **PGVector** - PostgreSQL extension for high-performance vector operations
 - **DeepEval** - AI agent evaluation and performance assessment
 
 ## 🤝 Contributing

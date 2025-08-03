@@ -1,13 +1,13 @@
 """
 Base Agent implementation providing common functionality for all agent types.
 Memory functionality is optional and configuration-driven.
+Uses direct composition instead of complex manager layers.
 """
 
 from typing import Optional, Dict, Any, List, AsyncGenerator
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.providers.manager import ProviderManager
 from app.core.agents.prompt_manager import PromptManager
-from app.core.agents.agent_resource_manager import AgentResourceManager
 from app.utils.logging import logger
 from app.utils.chat_utils import clean_response_for_memory
 from app.models.resources.memory import MemoryEntry, MemorySessionSummary
@@ -17,6 +17,7 @@ class BaseAgent:
     """
     Base class for all agents providing common functionality.
     Memory features are optional and activate only when configured.
+    Uses direct composition instead of complex manager layers.
     """
     
     def __init__(self, 
@@ -28,19 +29,24 @@ class BaseAgent:
         self.agent_id = agent_id
         self.user_id = user_id
         self.session_id = session_id
+        
+        # Direct resource composition (no managers)
+        self.memory = None
+        self.knowledge_base = None
+        
+        # Keep only essential managers
         self.tool_manager = AgentToolManager(agent_id)
-        self.resource_manager = AgentResourceManager(agent_id)
         self.provider_manager = ProviderManager()
         self.prompt_manager = PromptManager(agent_id)
+        
+        # Provider attributes
         self.provider = None
+        self.embedding_provider = None
+        self.rerank_provider = None
+        
         self.conversation_history = []
         self.summary = None
         self.initialized = False
-        
-        # Memory resource - None if not configured
-        self.memory_resource = None
-        
-        self.knowledge_base_resource = None
         
         # Store model configuration
         self.requested_model = model
@@ -55,63 +61,137 @@ class BaseAgent:
         return config.get("provider", "azure_openai_cc")
 
     def get_resource(self, resource_type: str):
-        """Get resource by type name - cleaner API."""
+        """Get resource by type name."""
         if resource_type == "memory":
-            return self.memory_resource
+            return self.memory
         elif resource_type == "knowledge_base":
-            return self.knowledge_base_resource
+            return self.knowledge_base
         return None
     
+    def wants_memory(self) -> bool:
+        """Check if agent is configured for memory."""
+        resources = self.tool_manager.config.get("resources", [])
+        return "memory" in resources
+
+    def wants_knowledge_base(self) -> bool:
+        """Check if agent is configured for knowledge base."""
+        resources = self.tool_manager.config.get("resources", [])
+        return "knowledge_base" in resources
+    
+    async def setup_providers(self):
+        """Initialize all providers needed by this agent."""
+        # Main provider (chat)
+        provider_id = self.tool_manager.config.get("provider", "azure_openai_cc")
+        provider_info = self.provider_manager.get_provider(provider_id)
+        config = provider_info["config_class"]()
+        self.provider = provider_info["class"](config)
+        await self.provider.initialize()
+        
+        # Embedding provider (may be same as main)
+        embedding_provider_id = self.tool_manager.config.get("embedding_provider", provider_id)
+        if embedding_provider_id != provider_id:
+            embedding_info = self.provider_manager.get_provider(embedding_provider_id)
+            embedding_config = embedding_info["config_class"]()
+            self.embedding_provider = embedding_info["class"](embedding_config)
+            await self.embedding_provider.initialize()
+        else:
+            self.embedding_provider = self.provider
+        
+        # Optional rerank provider
+        rerank_provider_id = self.tool_manager.config.get("rerank_provider")
+        if rerank_provider_id:
+            rerank_info = self.provider_manager.get_provider(rerank_provider_id)
+            rerank_config = rerank_info["config_class"]()
+            self.rerank_provider = rerank_info["class"](rerank_config)
+            await self.rerank_provider.initialize()
+    
+    async def create_memory(self):
+        """Create memory resource with explicit dependencies."""
+        from app.core.resources.memory import PostgreSQLMemoryResource
+        from app.config.settings import settings
+        
+        connection_string = (
+            f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+            f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+        )
+        
+        config = {
+            "connection_string": connection_string,
+            "default_ttl_hours": 24 * 7
+        }
+        
+        memory = PostgreSQLMemoryResource(f"{self.agent_id}_memory", config)
+        await memory.initialize()
+        return memory
+
+    async def create_knowledge_base(self):
+        """Create knowledge base with all dependencies injected."""
+        from app.core.resources.knowledge_base import KnowledgeBaseResource
+        from app.config.settings import settings
+        
+        # Get config
+        kb_config = self.tool_manager.config.get("knowledge_base", {})
+        
+        # Add database connection
+        connection_string = (
+            f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+            f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+        )
+        kb_config["connection_string"] = connection_string
+        
+        # Create with all dependencies
+        kb = KnowledgeBaseResource(f"{self.agent_id}_kb", kb_config)
+        
+        # Inject providers
+        kb.set_chat_provider(self.provider)
+        
+        # Get embedding model (use agent model if not specified)
+        agent_model = self.tool_manager.config.get("model")
+        default_model = self.requested_model or agent_model or self.provider.config.default_model
+        embedding_model = self.tool_manager.config.get("embedding_model", default_model)
+        
+        kb.set_embedding_provider(self.embedding_provider, embedding_model)
+        
+        if self.rerank_provider:
+            kb.set_rerank_provider(
+                self.rerank_provider,
+                self.tool_manager.config.get("rerank_model")
+            )
+        
+        # Initialize with all dependencies ready
+        await kb.initialize()
+        return kb
+    
     async def initialize(self):
-        """Initialize the agent and provider"""
+        """Initialize agent with explicit dependency flow."""
         if self.initialized:
             return
-            
+        
         try:
-            # Get provider
-            provider_info = self.provider_manager.get_provider(self.provider_id)
-            config = provider_info["config_class"]()
-            self.provider = provider_info["class"](config)
-            await self.provider.initialize()
+            # 1. Setup all providers first
+            await self.setup_providers()
             
-            # Get available tools
+            # 2. Get tools and model config
             self.available_tools = await self.tool_manager.get_available_tools()
-            logger.info(f"Agent {self.agent_id} initialized with {len(self.available_tools)} tools")
-
-            # Get system prompt
             self.system_prompt = self.prompt_manager.get_system_prompt_with_tools(self.available_tools)
-            logger.debug(f"System prompt: {self.system_prompt[:10]}")
-
-            # Get model and settings with priority: CLI args > agent config > provider default
-            agent_model, agent_model_settings = self.resource_manager.get_model_config()
+            
+            agent_model = self.tool_manager.config.get("model")
+            agent_model_settings = self.tool_manager.config.get("model_settings")
             self.model = self.requested_model or agent_model or self.provider.config.default_model
             self.model_settings = self.requested_model_settings or agent_model_settings
             
+            logger.info(f"Agent {self.agent_id} initialized with {len(self.available_tools)} tools")
             logger.debug(f"Model: {self.model}, Model settings: {self.model_settings}")
-
-            # Get memory resource if configured
-            self.memory_resource = await self.resource_manager.get_memory_resource()
-
-            # Get knowledge base resource if configured
-            self.knowledge_base_resource = await self.resource_manager.get_knowledge_base_resource()
-            if self.knowledge_base_resource:
-                self.knowledge_base_resource.set_chat_provider(self.provider)
-
-                embedding_provider_id = self.tool_manager.config["embedding_provider"]
-                embedding_model = self.tool_manager.config["embedding_model"]
-
-                if embedding_provider_id:
-                    embedding_provider_info = self.provider_manager.get_provider(embedding_provider_id)
-                    embedding_config = embedding_provider_info["config_class"]()
-                    embedding_provider = embedding_provider_info["class"](embedding_config)
-                    await embedding_provider.initialize() 
             
-            self.knowledge_base_resource.set_embedding_provider(embedding_provider, embedding_model)
+            # 3. Create resources if configured
+            if self.wants_memory():
+                self.memory = await self.create_memory()
             
-            #TO:DO Implement re-rank provider
-
+            if self.wants_knowledge_base():
+                self.knowledge_base = await self.create_knowledge_base()
             
             self.initialized = True
+            
         except Exception as e:
             logger.error(f"Error during agent initialization: {e}")
             raise
@@ -121,31 +201,29 @@ class BaseAgent:
         return clean_response_for_memory(response)
     
     async def save_memory(self, role: str, content: str):
-        """Save a memory entry to the memory resource. Only executes if memory is configured."""
-        if self.memory_resource:
+        """Save memory if available."""
+        if self.memory:
             memory_entry = MemoryEntry(
                 user_id=self.user_id,
                 session_id=self.session_id,
                 agent_id=self.agent_id,
                 content={"role": role, "content": content}
             )
-            await self.memory_resource.store_memory(memory_entry)
-        else:
-            logger.debug(f"No memory resource found for agent {self.agent_id}")
+            await self.memory.store_memory(memory_entry)
     
     async def load_memory(self) -> List[Dict[str, str]]:
-        """Load memory from the memory resource. Returns empty list if no memory configured."""
-        if not self.memory_resource:
+        """Load memory if available."""
+        if not self.memory:
             return []
-            
+        
         try:
-            memories: List[MemoryEntry] = await self.memory_resource.get_memories(
+            memories: List[MemoryEntry] = await self.memory.get_memories(
                 self.user_id, 
                 self.session_id, 
                 self.agent_id, 
                 order_direction="asc"
             )
-            summary: MemorySessionSummary = await self.memory_resource.get_session_summary(
+            summary: MemorySessionSummary = await self.memory.get_session_summary(
                 self.user_id, 
                 self.session_id, 
                 self.agent_id
@@ -172,7 +250,7 @@ class BaseAgent:
     
     async def _trigger_memory_compression(self, compression_config: Optional[Dict[str, Any]] = None):
         """Trigger memory compression if memory is configured."""
-        if not self.memory_resource:
+        if not self.memory:
             return
             
         try:
@@ -191,7 +269,8 @@ class BaseAgent:
                 self.agent_id, 
                 compression_config,
                 self.user_id,
-                self.session_id
+                self.session_id,
+                self.memory
             )
         except Exception as e:
             logger.error(f"Error during memory compression: {e}")

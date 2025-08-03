@@ -55,7 +55,8 @@ class TestBaseAgent:
         assert agent.agent_id == "test_agent"
         assert agent.user_id == "test_user"
         assert agent.session_id == "test_session"
-        assert agent.memory_resource is None
+        assert agent.memory is None
+        assert agent.knowledge_base is None
         assert not agent.initialized
         assert agent.conversation_history == []
         assert agent.provider is None
@@ -79,8 +80,6 @@ class TestBaseAgent:
         
         with patch.object(agent.tool_manager, 'config', mock_agent_config), \
              patch.object(agent.tool_manager, 'get_available_tools', AsyncMock(return_value=[])), \
-             patch.object(agent.resource_manager, 'get_model_config', return_value=("gpt-4", {"temperature": 0.7})), \
-             patch.object(agent.resource_manager, 'get_memory_resource', AsyncMock(return_value=None)), \
              patch.object(agent.provider_manager, 'get_provider', return_value={
                  "class": Mock(return_value=mock_provider),
                  "config_class": Mock
@@ -99,17 +98,19 @@ class TestBaseAgent:
         """Test agent initialization with memory resource"""
         agent = BaseAgent("test_agent")
         
-        with patch.object(agent.tool_manager, 'get_available_tools', AsyncMock(return_value=[])), \
-             patch.object(agent.resource_manager, 'get_model_config', return_value=(None, None)), \
-             patch.object(agent.resource_manager, 'get_memory_resource', AsyncMock(return_value=mock_memory_resource)), \
+        mock_config = {"resources": ["memory"]}
+        
+        with patch.object(agent.tool_manager, 'config', mock_config), \
+             patch.object(agent.tool_manager, 'get_available_tools', AsyncMock(return_value=[])), \
              patch.object(agent.provider_manager, 'get_provider', return_value={
                  "class": Mock(return_value=mock_provider),
                  "config_class": Mock
-             }):
+             }), \
+             patch.object(agent, 'create_memory', AsyncMock(return_value=mock_memory_resource)):
             
             await agent.initialize()
             
-            assert agent.memory_resource == mock_memory_resource
+            assert agent.memory == mock_memory_resource
     
     @pytest.mark.asyncio
     async def test_initialize_idempotent(self, mock_provider):
@@ -125,7 +126,7 @@ class TestBaseAgent:
     async def test_save_memory_with_resource(self, mock_memory_resource):
         """Test saving memory when resource is available"""
         agent = BaseAgent("test_agent", user_id="user1", session_id="session1")
-        agent.memory_resource = mock_memory_resource
+        agent.memory = mock_memory_resource
         
         await agent.save_memory("user", "Hello")
         
@@ -140,7 +141,7 @@ class TestBaseAgent:
     async def test_save_memory_without_resource(self):
         """Test saving memory when no resource is available"""
         agent = BaseAgent("test_agent")
-        agent.memory_resource = None
+        agent.memory = None
         
         # Should not raise exception
         await agent.save_memory("user", "Hello")
@@ -149,7 +150,7 @@ class TestBaseAgent:
     async def test_load_memory_without_resource(self):
         """Test loading memory when no resource is available"""
         agent = BaseAgent("test_agent")
-        agent.memory_resource = None
+        agent.memory = None
         
         history = await agent.load_memory()
         assert history == []
@@ -158,7 +159,7 @@ class TestBaseAgent:
     async def test_load_memory_with_messages(self, mock_memory_resource):
         """Test loading memory with messages"""
         agent = BaseAgent("test_agent", user_id="user1", session_id="session1")
-        agent.memory_resource = mock_memory_resource
+        agent.memory = mock_memory_resource
         
         # Mock memory entries
         mock_memories = [
@@ -177,7 +178,7 @@ class TestBaseAgent:
     async def test_load_memory_with_summary(self, mock_memory_resource):
         """Test loading memory with summary"""
         agent = BaseAgent("test_agent", user_id="user1", session_id="session1")
-        agent.memory_resource = mock_memory_resource
+        agent.memory = mock_memory_resource
         
         # Mock summary
         mock_summary = Mock(summary="Previous conversation summary")
@@ -199,7 +200,7 @@ class TestBaseAgent:
     async def test_get_conversation_history(self, mock_memory_resource):
         """Test get_conversation_history alias"""
         agent = BaseAgent("test_agent")
-        agent.memory_resource = mock_memory_resource
+        agent.memory = mock_memory_resource
         
         mock_memory_resource.get_memories.return_value = []
         
@@ -227,7 +228,7 @@ class TestBaseAgent:
     async def test_trigger_memory_compression_without_resource(self):
         """Test memory compression when no resource available"""
         agent = BaseAgent("test_agent")
-        agent.memory_resource = None
+        agent.memory = None
         
         # Should not raise exception
         await agent._trigger_memory_compression()
@@ -236,7 +237,7 @@ class TestBaseAgent:
     async def test_trigger_memory_compression_with_resource(self, mock_memory_resource):
         """Test memory compression with resource"""
         agent = BaseAgent("test_agent", user_id="user1", session_id="session1")
-        agent.memory_resource = mock_memory_resource
+        agent.memory = mock_memory_resource
         
         with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_agent_class:
             mock_compression_agent = Mock()
@@ -253,14 +254,15 @@ class TestBaseAgent:
                     "enabled": True
                 },
                 "user1",
-                "session1"
+                "session1",
+                mock_memory_resource
             )
     
     @pytest.mark.asyncio
     async def test_trigger_memory_compression_with_custom_config(self, mock_memory_resource):
         """Test memory compression with custom config"""
         agent = BaseAgent("test_agent", user_id="user1", session_id="session1")
-        agent.memory_resource = mock_memory_resource
+        agent.memory = mock_memory_resource
         
         custom_config = {
             "threshold_tokens": 5000,
@@ -279,7 +281,8 @@ class TestBaseAgent:
                 "test_agent",
                 custom_config,
                 "user1",
-                "session1"
+                "session1",
+                mock_memory_resource
             )
     
     @pytest.mark.asyncio
@@ -295,3 +298,31 @@ class TestBaseAgent:
         with patch.object(agent.tool_manager, 'config', {}):
             provider_id = agent._get_provider_from_config()
             assert provider_id == "azure_openai_cc"
+    
+    def test_wants_memory(self):
+        """Test wants_memory method"""
+        agent = BaseAgent("test_agent")
+        
+        # Test with memory in resources
+        with patch.object(agent.tool_manager, 'config', {"resources": ["memory"]}):
+            assert agent.wants_memory() is True
+        
+        # Test without memory in resources
+        with patch.object(agent.tool_manager, 'config', {"resources": []}):
+            assert agent.wants_memory() is False
+        
+        # Test with no resources key
+        with patch.object(agent.tool_manager, 'config', {}):
+            assert agent.wants_memory() is False
+    
+    def test_wants_knowledge_base(self):
+        """Test wants_knowledge_base method"""
+        agent = BaseAgent("test_agent")
+        
+        # Test with knowledge_base in resources
+        with patch.object(agent.tool_manager, 'config', {"resources": ["knowledge_base"]}):
+            assert agent.wants_knowledge_base() is True
+        
+        # Test without knowledge_base in resources
+        with patch.object(agent.tool_manager, 'config', {"resources": ["memory"]}):
+            assert agent.wants_knowledge_base() is False

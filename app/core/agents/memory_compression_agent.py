@@ -5,7 +5,6 @@ It acts as a specialized agent for creating summaries and managing compression l
 
 from typing import List, Dict, Any, Optional
 from app.core.agents.base_agent import BaseAgent
-from app.core.agents.agent_resource_manager import AgentResourceManager
 from app.core.resources.memory_compression_manager import MemoryCompressionManager
 from app.models.resources.memory import MemorySessionSummary
 from app.utils.logging import logger
@@ -26,14 +25,18 @@ class MemoryCompressionAgent(BaseAgent):
     async def compress_conversation(self, parent_agent_id: str, 
                                   compression_config: Dict[str, Any],
                                   user_id: str,
-                                  session_id: str):
+                                  session_id: str,
+                                  parent_memory_resource):
         """
         Compress conversation history using the compression agent.
         Returns compressed history but does not update database.
         
         Args:
-            conversation_history: Full conversation history to compress
-            compression_config: Optional compression configuration
+            parent_agent_id: ID of the parent agent
+            compression_config: Compression configuration
+            user_id: User ID for memory session
+            session_id: Session ID for memory session
+            parent_memory_resource: Memory resource from the parent agent
             
         Returns:
             Compressed conversation history
@@ -43,9 +46,6 @@ class MemoryCompressionAgent(BaseAgent):
         
         # Initialize compression manager with config
         compression_manager = MemoryCompressionManager(parent_agent_id, compression_config)
-
-        parent_resource_manager = AgentResourceManager(parent_agent_id)
-        parent_memory_resource = await parent_resource_manager.get_memory_resource()
         
         conversation_history = await parent_memory_resource.get_memories(user_id, session_id, parent_agent_id, order_by="created_at", order_direction="asc")        
         # Check if compression is needed

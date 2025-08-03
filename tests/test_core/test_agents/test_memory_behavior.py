@@ -16,7 +16,7 @@ class TestMemoryBehavior:
     async def test_base_agent_without_memory(self):
         """Test BaseAgent behavior when no memory resource is configured."""
         agent = BaseAgent("test_agent")
-        agent.memory_resource = None
+        agent.memory = None
         
         # Memory operations should handle gracefully
         await agent.save_memory("user", "test message")  # Should not raise
@@ -36,7 +36,7 @@ class TestMemoryBehavior:
         mock_memory.get_memories.return_value = []
         mock_memory.get_session_summary.return_value = None
         mock_memory.store_memory = AsyncMock()
-        agent.memory_resource = mock_memory
+        agent.memory = mock_memory
         
         # Memory operations should work
         await agent.save_memory("user", "test message")
@@ -52,7 +52,7 @@ class TestMemoryBehavior:
         agent = APIAgent("test_agent")
         
         # Without memory resource
-        agent.memory_resource = None
+        agent.memory = None
         history = await agent.get_conversation_history()
         assert history == []
         
@@ -62,7 +62,7 @@ class TestMemoryBehavior:
             Mock(content={"role": "user", "content": "Hello"})
         ]
         mock_memory.get_session_summary.return_value = None
-        agent.memory_resource = mock_memory
+        agent.memory = mock_memory
         
         history = await agent.get_conversation_history()
         assert len(history) == 1
@@ -74,7 +74,7 @@ class TestMemoryBehavior:
         agent = CLIAgent("test_agent")
         
         # Without memory resource
-        agent.memory_resource = None
+        agent.memory = None
         history = await agent.load_memory()
         assert history == []
         
@@ -84,7 +84,7 @@ class TestMemoryBehavior:
             Mock(content={"role": "assistant", "content": "Hi there"})
         ]
         mock_memory.get_session_summary.return_value = None
-        agent.memory_resource = mock_memory
+        agent.memory = mock_memory
         
         history = await agent.load_memory()
         assert len(history) == 1
@@ -97,7 +97,7 @@ class TestMemoryBehavior:
         base_agent = BaseAgent("test_agent")
         mock_memory = AsyncMock()
         mock_memory.get_memories.side_effect = Exception("Memory error")
-        base_agent.memory_resource = mock_memory
+        base_agent.memory = mock_memory
         
         # Should return empty list, not raise exception
         history = await base_agent.load_memory()
@@ -105,14 +105,14 @@ class TestMemoryBehavior:
         
         # Test APIAgent error handling (should inherit same behavior)
         api_agent = APIAgent("test_agent")  
-        api_agent.memory_resource = mock_memory
+        api_agent.memory = mock_memory
         
         history = await api_agent.get_conversation_history()
         assert history == []
         
         # Test CLIAgent error handling (should inherit same behavior)
         cli_agent = CLIAgent("test_agent")
-        cli_agent.memory_resource = mock_memory
+        cli_agent.memory = mock_memory
         
         history = await cli_agent.load_memory()
         assert history == []
@@ -125,7 +125,7 @@ class TestMemoryBehavior:
         
         # Test BaseAgent compression
         base_agent = BaseAgent("test_agent")
-        base_agent.memory_resource = mock_memory
+        base_agent.memory = mock_memory
         
         with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_class:
             mock_compression_agent = Mock()
@@ -136,7 +136,7 @@ class TestMemoryBehavior:
             mock_compression_agent.compress_conversation.assert_called_once()
         
         # Test without memory resource - should not trigger compression
-        base_agent.memory_resource = None
+        base_agent.memory = None
         with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_class:
             mock_compression_agent = Mock()
             mock_compression_class.return_value = mock_compression_agent

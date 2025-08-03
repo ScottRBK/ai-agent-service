@@ -85,7 +85,7 @@ class KnowledgeBaseResource(BaseResource):
             raise ResourceError("No embedding model configured", self.resource_id)
         
         # Use the embed method from the dedicated embedding provider
-        return await self.embedding_provider.embed(self.embedding_model, text)
+        return await self.embedding_provider.embed(model=self.embedding_model, text=text)
     
     def _chunk_text(self, text: str, doc_type: DocumentType) -> List[str]:
         """Split text into chunks using appropriate strategy for document type."""
