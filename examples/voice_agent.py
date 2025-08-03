@@ -29,15 +29,17 @@ import select
 import termios
 import tty
 from typing import Optional
+from contextlib import contextmanager
+import ctypes
+import platform
 
 try:
     import pyaudio
     import requests
-    import pygame
     import subprocess
 except ImportError as e:
     print(f"❌ Missing dependencies: {e}")
-    print("Install with: pip install pyaudio requests pygame")
+    print("Install with: pip install pyaudio requests")
     sys.exit(1)
 
 # Add the project root to the Python path
@@ -58,6 +60,48 @@ CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
+
+@contextmanager
+def suppress_stderr():
+    """Context manager to temporarily suppress stderr output at file descriptor level"""
+    # Save the original stderr file descriptor
+    stderr_fd = sys.stderr.fileno()
+    old_stderr_fd = os.dup(stderr_fd)
+    
+    # Open devnull
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    
+    try:
+        # Redirect stderr to devnull at the file descriptor level
+        os.dup2(devnull_fd, stderr_fd)
+        yield
+    finally:
+        # Restore original stderr
+        os.dup2(old_stderr_fd, stderr_fd)
+        os.close(old_stderr_fd)
+        os.close(devnull_fd)
+
+# Suppress ALSA warnings globally
+if os.getenv('SUPPRESS_AUDIO_WARNINGS', 'true').lower() == 'true':
+    # Set environment variables to minimize ALSA probing
+    os.environ['AUDIODEV'] = 'null'
+    os.environ['SDL_AUDIODRIVER'] = 'dummy'
+    
+    # For Linux systems, use ALSA lib error handler
+    if platform.system() == 'Linux':
+        try:
+            # Try to load libasound and set error handler to null
+            libasound = ctypes.cdll.LoadLibrary('libasound.so.2')
+            # Set ALSA error handler to null function
+            ERROR_HANDLER_FUNC = ctypes.CFUNCTYPE(None, ctypes.c_char_p, ctypes.c_int, 
+                                                  ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p)
+            def null_error_handler(filename, line, function, err, fmt):
+                pass
+            
+            c_error_handler = ERROR_HANDLER_FUNC(null_error_handler)
+            libasound.snd_lib_error_set_handler(c_error_handler)
+        except:
+            pass  # If we can't load libasound, continue anyway
 
 class VoiceServices:
     def __init__(self):
@@ -85,25 +129,18 @@ class VoiceServices:
             ('mpv', ['mpv', '--version']),
             ('paplay', ['paplay', '--version']),
             ('aplay', ['aplay', '--version']),
-            ('ffplay', ['ffplay', '-version']),
-            ('pygame', None)
+            ('ffplay', ['ffplay', '-version'])
         ]
         
         for method, test_cmd in methods:
-            if method == 'pygame':
-                try:
-                    pygame.mixer.init()
-                    return method
-                except:
-                    continue
-            else:
-                try:
+            try:
+                with suppress_stderr():
                     subprocess.run(test_cmd, capture_output=True, check=True, timeout=2)
-                    sys.stdout.write(f"✅ Audio playback: Using {method}\n")
-                    sys.stdout.flush()
-                    return method
-                except:
-                    continue
+                sys.stdout.write(f"✅ Audio playback: Using {method}\n")
+                sys.stdout.flush()
+                return method
+            except:
+                continue
         return None
     
     def transcribe_audio(self, audio_file_path: str) -> Optional[str]:
@@ -216,41 +253,31 @@ class VoiceServices:
         try:
             if self.playback_method == 'mpv':
                 # Use mpv with simple, reliable settings
-                result = subprocess.run([
-                    'mpv', 
-                    '--no-video',
-                    '--really-quiet',  # Even less output
-                    '--audio-device=pulse',
-                    '--no-cache',  # Disable caching to see if that helps
-                    audio_path
-                ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-                if result.returncode != 0:
-                    sys.stdout.write(f"   mpv error: {result.stderr}\n")
-                    sys.stdout.flush()
+                with suppress_stderr():
+                    result = subprocess.run([
+                        'mpv', 
+                        '--no-video',
+                        '--really-quiet',  # Even less output
+                        '--audio-device=pulse',
+                        '--no-cache',  # Disable caching to see if that helps
+                        audio_path
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif self.playback_method == 'paplay':
-                result = subprocess.run([
-                    'paplay', 
-                    '--latency-msec=200',
-                    '--process-time-msec=20',
-                    audio_path
-                ], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-                if result.returncode != 0:
-                    sys.stdout.write(f"   paplay error: {result.stderr}\n")
-                    sys.stdout.flush()
+                with suppress_stderr():
+                    result = subprocess.run([
+                        'paplay', 
+                        '--latency-msec=200',
+                        '--process-time-msec=20',
+                        audio_path
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif self.playback_method == 'aplay':
-                result = subprocess.run(['aplay', audio_path], 
-                                      capture_output=True, text=True)
-                if result.returncode != 0:
-                    sys.stdout.write(f"   aplay error: {result.stderr}\n")
-                    sys.stdout.flush()
+                with suppress_stderr():
+                    result = subprocess.run(['aplay', audio_path], 
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             elif self.playback_method == 'ffplay':
-                subprocess.run(['ffplay', '-nodisp', '-autoexit', audio_path], 
-                             capture_output=True)
-            elif self.playback_method == 'pygame':
-                pygame.mixer.music.load(audio_path)
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy():
-                    time.sleep(0.1)
+                with suppress_stderr():
+                    subprocess.run(['ffplay', '-nodisp', '-autoexit', audio_path], 
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 raise Exception("No audio playback method available")
         except Exception as e:
@@ -259,7 +286,8 @@ class VoiceServices:
 
 class AudioRecorder:
     def __init__(self):
-        self.audio = pyaudio.PyAudio()
+        with suppress_stderr():
+            self.audio = pyaudio.PyAudio()
         self.recording = False
         self.frames = []
     
@@ -267,13 +295,14 @@ class AudioRecorder:
         self.recording = True
         self.frames = []
         
-        stream = self.audio.open(
-            format=FORMAT,
-            channels=CHANNELS,
-            rate=RATE,
-            input=True,
-            frames_per_buffer=CHUNK
-        )
+        with suppress_stderr():
+            stream = self.audio.open(
+                format=FORMAT,
+                channels=CHANNELS,
+                rate=RATE,
+                input=True,
+                frames_per_buffer=CHUNK
+            )
         
         sys.stdout.write("\r🎤 Recording... (release SPACE to stop)\n")
         sys.stdout.flush()
