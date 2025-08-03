@@ -98,10 +98,14 @@ class BaseProvider(ABC):
         """Embed text using the provider."""
         pass
 
-    @abstractmethod
     async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
-        """Rerank candidates based on relevance to query. Returns scores in same order as candidates."""
-        pass
+        """
+        Default rerank implementation.
+        Providers should override this with model-specific implementations.
+        """
+        logger.warning(f"{self.__class__.__name__} using default rerank implementation")
+        # Return equal scores as this provider doesn't support re-ranking
+        return [0.5] * len(candidates)
 
     async def record_successful_call(self) -> None:
         """Record a successful call."""

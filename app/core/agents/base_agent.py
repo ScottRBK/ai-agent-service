@@ -107,12 +107,22 @@ class BaseAgent:
             self.embedding_provider = self.provider
         
         # Optional rerank provider
-        rerank_provider_id = self.tool_manager.config.get("rerank_provider")
+        # Check in knowledge_base resource config first, then top-level
+        kb_config = self._get_resource_config("knowledge_base")
+        rerank_provider_id = kb_config.get("rerank_provider") or self.tool_manager.config.get("rerank_provider")
+        
         if rerank_provider_id:
-            rerank_info = self.provider_manager.get_provider(rerank_provider_id)
-            rerank_config = rerank_info["config_class"]()
-            self.rerank_provider = rerank_info["class"](rerank_config)
-            await self.rerank_provider.initialize()
+            # Check if it's the same as main or embedding provider to reuse instances
+            if rerank_provider_id == provider_id:
+                self.rerank_provider = self.provider
+            elif hasattr(self, 'embedding_provider') and rerank_provider_id == embedding_provider_id:
+                self.rerank_provider = self.embedding_provider
+            else:
+                # Create new provider instance
+                rerank_info = self.provider_manager.get_provider(rerank_provider_id)
+                rerank_config = rerank_info["config_class"]()
+                self.rerank_provider = rerank_info["class"](rerank_config)
+                await self.rerank_provider.initialize()
     
     async def create_memory(self):
         """Create memory resource with explicit dependencies."""
@@ -164,10 +174,10 @@ class BaseAgent:
         kb.set_embedding_provider(self.embedding_provider, embedding_model)
         
         if self.rerank_provider:
-            kb.set_rerank_provider(
-                self.rerank_provider,
-                self.tool_manager.config.get("rerank_model")
-            )
+            # Check resource_config first, then top-level config
+            rerank_model = kb_config.get("rerank_model") or self.tool_manager.config.get("rerank_model")
+            if rerank_model:
+                kb.set_rerank_provider(self.rerank_provider, rerank_model)
         
         # Initialize with all dependencies ready
         await kb.initialize()

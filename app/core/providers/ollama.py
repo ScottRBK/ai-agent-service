@@ -1,6 +1,6 @@
 import importlib.metadata
 import json
-from app.core.providers.base import BaseProvider, ProviderMaxToolIterationsError
+from app.core.providers.base import BaseProvider, ProviderMaxToolIterationsError, ProviderConnectionError
 from app.models.health import HealthStatus
 from app.models.providers import OllamaConfig
 from app.models.tools.tools import Tool
@@ -238,4 +238,68 @@ class OllamaProvider(BaseProvider):
         return response.embeddings[0]
     
     async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
-        return await super().rerank(model, query, candidates)
+        """
+        Rerank candidates using specialized Ollama reranking models.
+        
+        Supports models like dengcao/Qwen3-Reranker-4B:Q8_0 which are specifically
+        designed for re-ranking tasks.
+        """
+        if not self.client:
+            raise ProviderConnectionError("Ollama client not initialized", self.name)
+        
+        try:
+            scores = []
+            
+            # Process each candidate with the re-ranking model
+            for candidate in candidates:
+                # Format input for re-ranking model using system/user/assistant format
+                # This format works better with Qwen re-ranking models
+                rerank_input = (
+                    f"<|system|>You are a relevance scoring model. Output only a decimal number between 0.0 and 1.0 "
+                    f"where 0.0 means completely irrelevant and 1.0 means perfectly relevant."
+                    f"<|user|>Query: {query}\nDocument: {candidate}<|assistant|>"
+                )
+                
+                response = await self.client.generate(
+                    model=model,
+                    prompt=rerank_input,
+                    options={
+                        "temperature": 0.0,  # Deterministic scoring
+                        "num_predict": 5,    # Only need a score
+                        "stop": ["\n", " ", "<|"]  # Stop after score
+                    }
+                )
+                
+                # Extract score from response
+                # Re-ranking models typically output a relevance score
+                try:
+                    score_text = response['response'].strip()
+                    logger.debug(f"Raw rerank response: '{score_text}'")
+                    
+                    # Handle different score formats
+                    # Try to extract numeric value from various formats
+                    import re
+                    # Look for patterns like "0.95", "Score: 0.95", "Relevance: 0.8", etc.
+                    numeric_match = re.search(r'[-+]?[0-9]*\.?[0-9]+', score_text)
+                    if numeric_match:
+                        score = float(numeric_match.group())
+                        # Normalize to 0-1 range if needed
+                        score = max(0.0, min(1.0, score))
+                    else:
+                        # If no numeric value found, use default
+                        logger.warning(f"No numeric score found in rerank response: '{score_text}'")
+                        score = 0.5
+                    
+                    scores.append(score)
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"Could not parse score from reranking model: {e}")
+                    scores.append(0.5)  # Default middle score
+            
+            await self.record_successful_call()
+            logger.info(f"Ollama reranked {len(candidates)} candidates with model {model}")
+            return scores
+            
+        except Exception as e:
+            logger.error(f"Ollama reranking failed: {e}")
+            # Return equal scores on failure
+            return [0.5] * len(candidates)

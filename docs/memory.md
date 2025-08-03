@@ -109,6 +109,8 @@ Memory functionality is configuration-driven and activates only when explicitly 
 - **`enable_cross_session_context`** (boolean, default: false) - Enable automatic cross-session context retrieval
 - **`relevance_threshold`** (float, default: 0.7) - Minimum relevance score for cross-session results
 - **`search_triggers`** (array of strings) - Phrases that trigger cross-session context search
+- **`rerank_provider`** (string, optional) - Provider for result reranking (experimental)
+- **`rerank_model`** (string, optional) - Model for reranking operations
 
 ## How Memory Works
 
@@ -244,7 +246,33 @@ The system automatically provides relevant context from past conversations:
 1. **Trigger Detection** - Checks user messages for configured search triggers
 2. **Vector Search** - Searches archived conversations using semantic similarity
 3. **Relevance Filtering** - Filters results by relevance threshold and excludes current session
-4. **Context Injection** - Injects relevant context before recent messages
+4. **Optional Reranking** - (Experimental) AI-powered reranking for improved relevance
+5. **Context Injection** - Injects relevant context before recent messages
+
+#### Experimental Reranking Feature
+
+The knowledge base supports an experimental reranking capability that can improve search result relevance:
+
+**Configuration Example:**
+```json
+{
+  "knowledge_base": {
+    "rerank_provider": "azure_openai_cc",
+    "rerank_model": "gpt-4o-mini",
+    "enable_cross_session_context": true
+  }
+}
+```
+
+**Limitations:**
+- **Ollama Provider**: Currently has limited reranking functionality due to missing logits support in the Ollama API. Reranking with Ollama will use a workaround that may not provide optimal results.
+- **Performance Impact**: Reranking adds an additional AI call, increasing latency and cost
+- **Experimental Status**: This feature is under active development and behavior may change
+
+**Recommended Usage:**
+- Use Azure OpenAI or other providers with full logits support for best reranking results
+- Consider the latency/accuracy tradeoff for your use case
+- Monitor reranking performance and adjust relevance thresholds accordingly
 
 ### Search Triggers
 
@@ -442,6 +470,12 @@ async def create_knowledge_base(self):
     await kb.initialize()
     return kb
 ```
+
+**Note on Reranking Providers:**
+- The rerank provider is optional and only used when explicitly configured
+- Azure OpenAI providers offer full reranking support with logits
+- Ollama provider has limited reranking due to API constraints
+- The system will gracefully handle missing rerank providers
 
 ### Error Handling
 

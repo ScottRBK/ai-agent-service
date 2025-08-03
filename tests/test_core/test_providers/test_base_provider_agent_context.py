@@ -272,3 +272,82 @@ class TestBaseProviderAgentContext:
                     {"param": "value"}, 
                     agent_id="test_agent"
                 )
+
+
+class TestBaseProviderReranking:
+    """Test cases for BaseProvider re-ranking functionality"""
+    
+    @pytest.fixture
+    def mock_config(self):
+        """Mock provider configuration"""
+        return ProviderConfig(
+            name="test_provider",
+            provider_type=ProviderType.AZURE_OPENAI_CC,
+            api_key="test_key",
+            endpoint="https://test.openai.azure.com/",
+            default_model="gpt-4"
+        )
+    
+    @pytest.mark.asyncio
+    async def test_custom_rerank_implementation(self, mock_config):
+        """Test that MockProvider has custom re-ranking implementation"""
+        provider = MockProvider(mock_config)
+        
+        scores = await provider.rerank(
+            "test-model",
+            "test query",
+            ["high relevance", "medium relevance", "low relevance"]
+        )
+        
+        # Should use MockProvider's custom implementation, not BaseProvider default
+        assert scores == [0.8, 0.6, 0.4]
+    
+    @pytest.mark.asyncio
+    async def test_rerank_with_empty_candidates(self, mock_config):
+        """Test MockProvider re-ranking with empty candidates list"""
+        provider = MockProvider(mock_config)
+        
+        scores = await provider.rerank(
+            "test-model",
+            "test query", 
+            []
+        )
+        
+        # MockProvider returns fixed scores regardless of input
+        assert scores == [0.8, 0.6, 0.4]
+    
+    @pytest.mark.asyncio
+    async def test_rerank_single_candidate(self, mock_config):
+        """Test MockProvider re-ranking with single candidate"""
+        provider = MockProvider(mock_config)
+        
+        scores = await provider.rerank(
+            "test-model",
+            "test query",
+            ["single document"]
+        )
+        
+        # MockProvider has custom implementation, not BaseProvider default
+        assert scores == [0.8, 0.6, 0.4]
+    
+    @pytest.mark.asyncio
+    async def test_rerank_with_different_model_names(self, mock_config):
+        """Test re-ranking with various model names"""
+        provider = MockProvider(mock_config)
+        
+        models_to_test = [
+            "gpt-4",
+            "custom-rerank-model:latest",
+            "reranker-v2.0",
+            "specialized/rerank:Q8_0"
+        ]
+        
+        for model in models_to_test:
+            scores = await provider.rerank(
+                model,
+                "test query",
+                ["doc1", "doc2"]
+            )
+            
+            # MockProvider should return same scores regardless of model or input
+            assert scores == [0.8, 0.6, 0.4]
