@@ -112,15 +112,17 @@ def test_convert_tool_registry_to_chat_completions_format(clean_tool_registry):
         }
     ]
 
-def test_execute_tool_call_valid_tool(clean_tool_registry):
+@pytest.mark.asyncio
+async def test_execute_tool_call_valid_tool(clean_tool_registry):
     """Test that the tool registry is executed correctly"""
-    result = ToolRegistry.execute_tool_call("echo", {"text": "Hello, world!"})
+    result = await ToolRegistry.execute_tool_call("echo", {"text": "Hello, world!"})
     assert result == "Echoed: Hello, world!"
 
-def test_execute_tool_call_invalid_tool():
+@pytest.mark.asyncio
+async def test_execute_tool_call_invalid_tool():
     """Test that the tool registry is executed correctly"""
     with pytest.raises(ValueError):
-        ToolRegistry.execute_tool_call("invalid_tool", {"text": "Hello, world!"})
+        await ToolRegistry.execute_tool_call("invalid_tool", {"text": "Hello, world!"})
 
 @patch('builtins.open', new_callable=mock_open)
 def test_load_mcp_servers_with_mock_open(mock_file, mock_mcp_servers_data):

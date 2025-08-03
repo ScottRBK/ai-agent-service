@@ -53,12 +53,7 @@ class APIAgent(BaseAgent):
         await self.save_memory("assistant", self._clean_response_for_memory(response))
 
         # Trigger memory compression
-        compression_config = {
-            "threshold_tokens": 10000,
-            "recent_messages_to_keep": 10,
-            "enabled": True
-        }
-        await self._trigger_memory_compression(compression_config)
+        await self._trigger_memory_compression()
         
         return response
     
@@ -100,9 +95,4 @@ class APIAgent(BaseAgent):
         await self.save_memory("assistant", self._clean_response_for_memory(full_response))
 
         # Trigger memory compression
-        compression_config = {
-            "threshold_tokens": 10000,
-            "recent_messages_to_keep": 10,
-            "enabled": True
-        }
-        await self._trigger_memory_compression(compression_config)
+        await self._trigger_memory_compression()

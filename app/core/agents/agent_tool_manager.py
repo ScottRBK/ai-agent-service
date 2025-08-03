@@ -35,8 +35,9 @@ class AgentToolManager:
     Supports MCP servers like deepwiki and fetch, as well as regular registered tools.
     """
     
-    def __init__(self, agent_id: str):
+    def __init__(self, agent_id: str, agent_instance=None):
         self.agent_id = agent_id
+        self.agent_instance = agent_instance
         self.config = self.load_agent_config()
         self.mcp_servers_cache = None
         self.mcp_tools_cache = None
@@ -262,14 +263,14 @@ class AgentToolManager:
     
     async def execute_regular_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
         """
-        Execute a regular tool.
+        Execute a regular tool, optionally passing agent context if available.
         """
         # Check if agent has access to this tool
         if self.config.get("allowed_regular_tools") is not None:
             if tool_name not in self.config.get("allowed_regular_tools", []):
                 raise ValueError(f"Agent {self.agent_id} does not have access to tool {tool_name}")
         logger.info(f"Executing regular tool {tool_name} with arguments {arguments}")
-        return ToolRegistry.execute_tool_call(tool_name, arguments)
+        return await ToolRegistry.execute_tool_call(tool_name, arguments, agent_context=self.agent_instance)
     
     async def execute_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]) -> str:
         """

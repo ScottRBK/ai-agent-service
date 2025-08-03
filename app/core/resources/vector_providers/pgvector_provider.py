@@ -66,6 +66,26 @@ namespace_index = Index(
     ChunkTable.namespace
 )
 
+# Temporal index for conversation queries
+temporal_index = Index(
+    'ix_documents_created_at',
+    DocumentTable.created_at.desc()
+)
+
+# Composite index for namespace and doc_type
+namespace_doctype_index = Index(
+    'ix_documents_namespace_doctype',
+    DocumentTable.namespace,
+    DocumentTable.doc_type
+)
+
+# GIN index for metadata searching
+metadata_gin_index = Index(
+    'ix_documents_metadata_gin',
+    DocumentTable.doc_metadata,
+    postgresql_using='gin'
+)
+
 
 class PGVectorProvider(VectorStoreProvider):
     """PostgresSQL with pgvector implementation"""

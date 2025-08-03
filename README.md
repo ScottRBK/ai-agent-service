@@ -175,6 +175,17 @@ The service uses environment-based configuration with sensible defaults. Key con
 
 For detailed configuration options, environment variables, and examples, see [Deployment Guide](docs/deployment.md).
 
+## 🧠 Memory System
+
+The service includes a comprehensive memory system providing:
+
+- **PostgreSQL-based persistence** - Conversation history with session isolation
+- **AI-powered compression** - Intelligent summarization when conversations exceed token thresholds  
+- **Cross-session context** - Automatic retrieval of relevant context from past conversations
+- **Knowledge base archival** - Compressed conversations archived for enhanced context awareness
+
+For detailed memory configuration, compression settings, and usage examples, see [Memory Documentation](docs/memory.md).
+
 ## 📡 API Reference
 
 The service provides comprehensive REST and OpenAI-compatible APIs:

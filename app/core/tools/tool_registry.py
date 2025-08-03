@@ -34,7 +34,7 @@ def register_tool(
                 type=tool_type,
                 parameters=ToolParameters(
                     properties=params_model.model_json_schema()["properties"],
-                    required=params_model.model_json_schema()["required"]
+                    required=params_model.model_json_schema().get("required", [])
                 ),
                 examples=examples
             ),
@@ -164,7 +164,7 @@ class ToolRegistry:
         return cc_tools
     
     @staticmethod
-    def execute_tool_call(tool_name: str, arguments: dict) -> str:
+    async def execute_tool_call(tool_name: str, arguments: dict, agent_context=None) -> str:
         if tool_name not in TOOL_REGISTRY:
             raise ValueError(f"Tool '{tool_name}' not registered.")
 
@@ -177,7 +177,27 @@ class ToolRegistry:
         except ValidationError as e:
             raise ValueError(f"Argument validation error: {e}")
 
-        return implementation(**validated_args.model_dump())
+        # Check if the tool expects agent_context using inspect
+        import inspect
+        
+        sig = inspect.signature(implementation)
+        
+        if 'agent_context' in sig.parameters:
+            # Tool expects agent context - pass it as keyword argument
+            validated_args_dict = validated_args.model_dump()
+            validated_args_dict['agent_context'] = agent_context
+            
+            if inspect.iscoroutinefunction(implementation):
+                # For async functions, await them
+                return await implementation(**validated_args_dict)
+            else:
+                return implementation(**validated_args_dict)
+        else:
+            # Regular tool without agent context
+            if inspect.iscoroutinefunction(implementation):
+                return await implementation(**validated_args.model_dump())
+            else:
+                return implementation(**validated_args.model_dump())
     
     @staticmethod
     def convert_mcp_tools_to_chatcompletions(mcp_server_label: str, mcp_tools: list[MCPTool]) -> list[dict[str, Any]]:

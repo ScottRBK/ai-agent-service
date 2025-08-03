@@ -78,6 +78,11 @@ class BaseAgent:
         resources = self.tool_manager.config.get("resources", [])
         return "knowledge_base" in resources
     
+    def _get_resource_config(self, resource_name: str) -> dict:
+        """Get resource configuration directly from resource_config"""
+        resource_config = self.tool_manager.config.get("resource_config", {})
+        return resource_config.get(resource_name, {})
+    
     async def setup_providers(self):
         """Initialize all providers needed by this agent."""
         # Main provider (chat)
@@ -85,10 +90,14 @@ class BaseAgent:
         provider_info = self.provider_manager.get_provider(provider_id)
         config = provider_info["config_class"]()
         self.provider = provider_info["class"](config)
+        # Set agent instance on provider for tool execution
+        self.provider.agent_instance = self
         await self.provider.initialize()
         
         # Embedding provider (may be same as main)
-        embedding_provider_id = self.tool_manager.config.get("embedding_provider", provider_id)
+        # Check in knowledge_base resource config first, then top-level config
+        kb_config = self._get_resource_config("knowledge_base")
+        embedding_provider_id = kb_config.get("embedding_provider") or self.tool_manager.config.get("embedding_provider", provider_id)
         if embedding_provider_id != provider_id:
             embedding_info = self.provider_manager.get_provider(embedding_provider_id)
             embedding_config = embedding_info["config_class"]()
@@ -129,8 +138,8 @@ class BaseAgent:
         from app.core.resources.knowledge_base import KnowledgeBaseResource
         from app.config.settings import settings
         
-        # Get config
-        kb_config = self.tool_manager.config.get("knowledge_base", {})
+        # Get config from resource_config
+        kb_config = self._get_resource_config("knowledge_base")
         
         # Add database connection
         connection_string = (
@@ -145,10 +154,12 @@ class BaseAgent:
         # Inject providers
         kb.set_chat_provider(self.provider)
         
-        # Get embedding model (use agent model if not specified)
+        # Get embedding model from knowledge base config
         agent_model = self.tool_manager.config.get("model")
         default_model = self.requested_model or agent_model or self.provider.config.default_model
-        embedding_model = self.tool_manager.config.get("embedding_model", default_model)
+        
+        # Check in resource_config first, then fall back to top-level config
+        embedding_model = kb_config.get("embedding_model") or self.tool_manager.config.get("embedding_model", default_model)
         
         kb.set_embedding_provider(self.embedding_provider, embedding_model)
         
@@ -212,11 +223,12 @@ class BaseAgent:
             await self.memory.store_memory(memory_entry)
     
     async def load_memory(self) -> List[Dict[str, str]]:
-        """Load memory if available."""
+        """Load memory with automatic cross-session context if enabled."""
         if not self.memory:
             return []
         
         try:
+            # Load current session memory
             memories: List[MemoryEntry] = await self.memory.get_memories(
                 self.user_id, 
                 self.session_id, 
@@ -238,6 +250,26 @@ class BaseAgent:
                 for memory in memories
             ])
             
+            # Add cross-session context if enabled
+            kb_config = self._get_resource_config("knowledge_base")
+            if (kb_config.get("enable_cross_session_context", False) and 
+                self.knowledge_base and conversation_history):
+                
+                # Check if latest message warrants cross-session search
+                last_user_msg = next((m for m in reversed(conversation_history) 
+                                    if m["role"] == "user"), None)
+                if last_user_msg and self._should_search_cross_session(last_user_msg["content"]):
+                    cross_session_context = await self._get_cross_session_context(
+                        last_user_msg["content"], self.session_id
+                    )
+                    if cross_session_context:
+                        # Insert cross-session context before recent messages
+                        insert_position = max(len(conversation_history) - 5, 1)  # Keep last 5 messages
+                        conversation_history.insert(insert_position, {
+                            "role": "system",
+                            "content": cross_session_context
+                        })
+            
             return conversation_history
         
         except Exception as e:
@@ -248,29 +280,97 @@ class BaseAgent:
         """Get conversation history. Alias for load_memory for compatibility."""
         return await self.load_memory()
     
-    async def _trigger_memory_compression(self, compression_config: Optional[Dict[str, Any]] = None):
-        """Trigger memory compression if memory is configured."""
+    async def _trigger_memory_compression(self):
+        """Trigger memory compression when threshold is reached"""
         if not self.memory:
+            return
+        
+        memory_config = self._get_resource_config("memory")
+        compression_config = memory_config.get("compression", {
+            "threshold_tokens": 10000,
+            "recent_messages_to_keep": 10,
+            "enabled": True
+        })
+        
+        if not compression_config.get("enabled", True):
             return
             
         try:
             # Import here to avoid circular dependency
             from app.core.agents.memory_compression_agent import MemoryCompressionAgent
             
-            if not compression_config:
-                compression_config = {
-                    "threshold_tokens": 10000,
-                    "recent_messages_to_keep": 10,
-                    "enabled": True
-                }
+            # Pass knowledge base resource if archival is enabled
+            knowledge_base_resource = None
+            if compression_config.get("archive_conversations", False) and self.knowledge_base:
+                knowledge_base_resource = self.knowledge_base
             
             memory_compression_agent = MemoryCompressionAgent()
             await memory_compression_agent.compress_conversation(
-                self.agent_id, 
-                compression_config,
-                self.user_id,
-                self.session_id,
-                self.memory
+                parent_agent_id=self.agent_id,
+                compression_config=compression_config,
+                user_id=self.user_id,
+                session_id=self.session_id,
+                parent_memory_resource=self.memory,
+                knowledge_base_resource=knowledge_base_resource  # New parameter
             )
         except Exception as e:
             logger.error(f"Error during memory compression: {e}")
+    
+    def _should_search_cross_session(self, user_message: str) -> bool:
+        """Determine if cross-session search is needed"""
+        kb_config = self._get_resource_config("knowledge_base")
+        
+        # Check configuration for custom triggers
+        triggers = kb_config.get("search_triggers", [
+            "what did we discuss", "previous conversation", "last time",
+            "remind me", "we mentioned", "earlier you said"
+        ])
+        
+        return any(trigger in user_message.lower() for trigger in triggers)
+    
+    async def _get_cross_session_context(self, query: str, current_session_id: str) -> Optional[str]:
+        """Retrieve relevant context from other sessions"""
+        if not self.knowledge_base:
+            return None
+        
+        try:
+            kb_config = self._get_resource_config("knowledge_base")
+            relevance_threshold = kb_config.get("relevance_threshold", 0.7)
+            
+            # Search for relevant past conversations
+            results = await self.knowledge_base.search(
+                query=query,
+                namespaces=[f"conversations:{self.user_id}"],
+                limit=10,
+                use_reranking=True
+            )
+            
+            # Filter by relevance threshold and exclude current session
+            relevant_results = []
+            for r in results:
+                if r.score > relevance_threshold:
+                    # Check if this is from a different session
+                    metadata = r.document.metadata if r.document else {}
+                    if metadata.get('session_id') != current_session_id:
+                        relevant_results.append(r)
+                        if len(relevant_results) >= 3:
+                            break
+            
+            if not relevant_results:
+                return None
+            
+            # Format context
+            context_parts = ["## Relevant Past Conversations\n"]
+            for result in relevant_results:
+                metadata = result.document.metadata if result.document else {}
+                date_range = metadata.get('date_range', {})
+                context_parts.append(
+                    f"### Session from {date_range.get('start', 'Unknown date')}\n"
+                    f"{result.chunk.content}\n"
+                )
+            
+            return "\n".join(context_parts)
+            
+        except Exception as e:
+            logger.warning(f"Cross-session context retrieval failed: {e}")
+            return None  # Graceful degradation

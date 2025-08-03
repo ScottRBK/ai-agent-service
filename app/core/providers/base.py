@@ -66,6 +66,7 @@ class BaseProvider(ABC):
         self.cached_tools = {}  # Cache tools per agent_id
 
         self.tool_calls_made = []
+        self.agent_instance = None  # Will be set by agent during initialization
 
     @abstractmethod 
     async def health_check(self) -> HealthStatus:
@@ -129,14 +130,22 @@ class BaseProvider(ABC):
             return tools if tools else None
         return None
 
-    async def execute_tool_call(self, tool_name: str, arguments: dict, agent_id: str = None) -> str:
+    async def execute_tool_call(self, tool_name: str, arguments: dict, agent_id: str = None, agent_instance=None) -> str:
         """
         Execute a tool call with extracted name and arguments.
         Each provider extracts these from their own API structure.
+        
+        Args:
+            tool_name: Name of the tool to execute
+            arguments: Tool arguments
+            agent_id: ID of the agent executing the tool
+            agent_instance: Optional agent instance for tools that need agent context
         """
 
         if agent_id:
-            agent_manager = AgentToolManager(agent_id)
+            # Use the provided agent_instance or fall back to the stored one
+            agent_ctx = agent_instance or self.agent_instance
+            agent_manager = AgentToolManager(agent_id, agent_instance=agent_ctx)
 
             result = await agent_manager.execute_tool(tool_name, arguments)
 
@@ -149,7 +158,7 @@ class BaseProvider(ABC):
                 
             return result
         else:
-            return ToolRegistry.execute_tool_call(tool_name, arguments)
+            return await ToolRegistry.execute_tool_call(tool_name, arguments)
         
     def get_tool_calls_made(self) -> list[Dict[str, str]]:
         return self.tool_calls_made

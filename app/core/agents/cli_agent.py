@@ -49,12 +49,7 @@ class CLIAgent(BaseAgent):
         clean_response = self._clean_response_for_memory(full_response)
         await self.save_memory("assistant", clean_response)
         
-        compression_config = {
-            "threshold_tokens": 500,
-            "recent_messages_to_keep": 4,
-            "enabled": True
-        }
-        await self._trigger_memory_compression(compression_config)
+        await self._trigger_memory_compression()
 
     async def chat_with_memory(self, user_input: str) -> str:
         """Send a message to the agent and get response."""
@@ -78,12 +73,7 @@ class CLIAgent(BaseAgent):
         clean_response = self._clean_response_for_memory(response)
         await self.save_memory("assistant", clean_response)
 
-        compression_config = {
-            "threshold_tokens": 4000,
-            "recent_messages_to_keep": 4,
-            "enabled": True
-        }
-        await self._trigger_memory_compression(compression_config)
+        await self._trigger_memory_compression()
        
         return response
     

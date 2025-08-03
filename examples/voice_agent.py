@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Voice-enabled agent runner with STT/TTS integration.
 
@@ -54,6 +53,7 @@ from app.utils.chat_utils import clean_response_for_memory
 # Voice service endpoints
 STT_URL = "http://127.0.0.1:2022/v1/audio/transcriptions"
 TTS_URL = "http://127.0.0.1:8880/v1/audio/speech"
+
 
 # Audio settings
 CHUNK = 1024

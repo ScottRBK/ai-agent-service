@@ -81,5 +81,46 @@
     "provider": "azure_openai",
     "model": "gpt-4.1-nano",
     "resources": ["memory"]
+  },
+  {
+    "agent_id": "test_knowledge_agent",
+    "system_prompt_file": "cli_agent.txt",
+    "provider": "azure_openai_cc",
+    "model": "gpt-4o-mini",
+    "model_settings": {
+      "temperature": 0.7,
+      "max_tokens": 2000
+    },
+    "resources": ["memory", "knowledge_base"],
+    "allowed_regular_tools": [
+      "get_current_datetime",
+      "search_knowledge_base",
+      "list_documents"
+    ],
+    "allowed_mcp_servers": {},
+    "resource_config": {
+      "memory": {
+        "compression": {
+          "enabled": true,
+          "threshold_tokens": 8000,
+          "recent_messages_to_keep": 10,
+          "archive_conversations": true
+        }
+      },
+      "knowledge_base": {
+        "vector_provider": "pgvector",
+        "chunk_size": 800,
+        "chunk_overlap": 100,
+        "embedding_provider": "azure_openai_cc",
+        "embedding_model": "text-embedding-ada-002",
+        "enable_cross_session_context": true,
+        "relevance_threshold": 0.7,
+        "search_triggers": [
+          "what did we discuss", 
+          "previous conversation", 
+          "last time"
+        ]
+      }
+    }
   }
 ]

@@ -247,43 +247,55 @@ class TestBaseAgent:
             await agent._trigger_memory_compression()
             
             mock_compression_agent.compress_conversation.assert_called_once_with(
-                "test_agent",
-                {
+                parent_agent_id="test_agent",
+                compression_config={
                     "threshold_tokens": 10000,
                     "recent_messages_to_keep": 10,
                     "enabled": True
                 },
-                "user1",
-                "session1",
-                mock_memory_resource
+                user_id="user1",
+                session_id="session1",
+                parent_memory_resource=mock_memory_resource,
+                knowledge_base_resource=None
             )
     
     @pytest.mark.asyncio
-    async def test_trigger_memory_compression_with_custom_config(self, mock_memory_resource):
+    async def test_trigger_memory_compression_with_custom_config(self, mock_memory_resource, mock_agent_config):
         """Test memory compression with custom config"""
         agent = BaseAgent("test_agent", user_id="user1", session_id="session1")
         agent.memory = mock_memory_resource
         
+        # Mock custom config in resource_config
         custom_config = {
-            "threshold_tokens": 5000,
-            "recent_messages_to_keep": 5,
-            "enabled": True
+            "memory": {
+                "compression": {
+                    "threshold_tokens": 5000,
+                    "recent_messages_to_keep": 5,
+                    "enabled": True
+                }
+            }
         }
         
-        with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_agent_class:
-            mock_compression_agent = Mock()
-            mock_compression_agent.compress_conversation = AsyncMock()
-            mock_compression_agent_class.return_value = mock_compression_agent
-            
-            await agent._trigger_memory_compression(custom_config)
-            
-            mock_compression_agent.compress_conversation.assert_called_once_with(
-                "test_agent",
-                custom_config,
-                "user1",
-                "session1",
-                mock_memory_resource
-            )
+        with patch.object(agent.tool_manager, 'config', {**mock_agent_config, "resource_config": custom_config}):
+            with patch('app.core.agents.memory_compression_agent.MemoryCompressionAgent') as mock_compression_agent_class:
+                mock_compression_agent = Mock()
+                mock_compression_agent.compress_conversation = AsyncMock()
+                mock_compression_agent_class.return_value = mock_compression_agent
+                
+                await agent._trigger_memory_compression()
+                
+                mock_compression_agent.compress_conversation.assert_called_once_with(
+                    parent_agent_id="test_agent",
+                    compression_config={
+                        "threshold_tokens": 5000,
+                        "recent_messages_to_keep": 5,
+                        "enabled": True
+                    },
+                    user_id="user1",
+                    session_id="session1",
+                    parent_memory_resource=mock_memory_resource,
+                    knowledge_base_resource=None
+                )
     
     @pytest.mark.asyncio
     async def test_get_provider_from_config(self, mock_agent_config):
