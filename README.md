@@ -266,15 +266,18 @@ For troubleshooting common issues, configuration problems, and deployment guidan
 - **DeepEval Integration**: Agent performance assessment
 - **Tool Correctness**: Validates appropriate tool usage
 - **Hallucination Detection**: Factual accuracy measurement
+- **RAG Metrics**: Faithfulness, Contextual Relevancy, Contextual Recall, Contextual Precision
 - **Custom Metrics**: GEval with observability and tracing
 
 ### Run Agent Evaluations
 ```bash
-# Generate golden test cases
-python app/evaluation/evals/cli_agent.py --generate
+# CLI agent evaluation
+python app/evaluation/evals/cli_agent.py --generate  # Generate golden test cases
+python app/evaluation/evals/cli_agent.py --verbose   # Run evaluation with detailed output
 
-# Run evaluation with detailed output
-python app/evaluation/evals/cli_agent.py --verbose
+# Knowledge agent evaluation with RAG metrics
+python app/evaluation/evals/knowledge_agent.py --generate  # Generate RAG test cases  
+python app/evaluation/evals/knowledge_agent.py --verbose   # Run RAG evaluation
 ```
 
 ### Quick Test Commands

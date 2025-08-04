@@ -85,10 +85,13 @@ class TestGoldenDataset:
     @pytest.fixture
     def sample_synthesizer_config(self):
         """Create sample synthesizer configuration"""
+        from deepeval.synthesizer.config import StylingConfig
         return {
-            "model": "gpt-4",
-            "temperature": 0.7,
-            "max_tokens": 1000
+            "model": MagicMock(),
+            "styling_config": StylingConfig(
+                scenario="Test scenario",
+                task="Test task"
+            )
         }
 
     @pytest.mark.asyncio
@@ -689,3 +692,157 @@ class TestGoldenDataset:
         
         # Verify correct number of goldens were added
         assert len(dataset.goldens) == max_goldens
+
+    @pytest.mark.asyncio
+    async def test_generate_from_contexts_with_retrieval_context(self, sample_synthesizer_config):
+        """Test generation with retrieval_context for RAG metrics"""
+        contexts_with_rag = [
+            {
+                "context": "Context about user authentication",
+                "tools": ["search_knowledge_base"],
+                "retrieval_context": [
+                    "Previous discussion: JWT tokens with 1-hour expiration",
+                    "Security context: Use refresh tokens for extended sessions"
+                ],
+                "expected_output": "Based on our previous discussion, use JWT with 1-hour expiration"
+            }
+        ]
+        
+        mock_synthesizer = AsyncMock()
+        mock_golden = MagicMock()
+        mock_golden.input = "How should we implement authentication?"
+        mock_golden.expected_output = "Synthesized output"
+        mock_golden.expected_tools = []
+        mock_synthesizer.a_generate_goldens_from_contexts.return_value = [mock_golden]
+
+        dataset = GoldenDataset("rag_test")
+
+        with patch('app.evaluation.dataset.Synthesizer', return_value=mock_synthesizer), \
+             patch('builtins.print'):
+            
+            await dataset.generate_from_contexts(contexts_with_rag, sample_synthesizer_config)
+
+        # Verify retrieval_context was preserved
+        assert len(dataset.goldens) == 1
+        golden = dataset.goldens[0]
+        assert hasattr(golden, 'retrieval_context')
+        assert golden.retrieval_context == [
+            "Previous discussion: JWT tokens with 1-hour expiration",
+            "Security context: Use refresh tokens for extended sessions"
+        ]
+        
+        # Verify expected_output was overridden
+        assert golden.expected_output == "Based on our previous discussion, use JWT with 1-hour expiration"
+        
+        # Verify expected_tools were set
+        assert len(golden.expected_tools) == 1
+        assert golden.expected_tools[0].name == "search_knowledge_base"
+
+    @pytest.mark.asyncio
+    async def test_generate_from_contexts_with_context_metadata_objects(self, sample_synthesizer_config):
+        """Test generation using ContextWithMetadata objects"""
+        from app.evaluation.config import ContextWithMetadata
+        
+        contexts_with_metadata = [
+            ContextWithMetadata(
+                context=["RAG evaluation context"],
+                tools=["search_docs", "retrieve_context"],
+                retrieval_context=["Document 1: API documentation", "Document 2: Implementation guide"],
+                expected_output="Found relevant documentation for your query"
+            )
+        ]
+        
+        mock_synthesizer = AsyncMock()
+        mock_golden = MagicMock()
+        mock_golden.input = "Find API documentation"
+        mock_golden.expected_output = "Synthesized response"
+        mock_golden.expected_tools = []
+        mock_synthesizer.a_generate_goldens_from_contexts.return_value = [mock_golden]
+
+        dataset = GoldenDataset("metadata_test")
+
+        with patch('app.evaluation.dataset.Synthesizer', return_value=mock_synthesizer), \
+             patch('builtins.print'):
+            
+            await dataset.generate_from_contexts(contexts_with_metadata, sample_synthesizer_config)
+
+        # Verify all fields were properly handled
+        assert len(dataset.goldens) == 1
+        golden = dataset.goldens[0]
+        
+        # Check retrieval_context
+        assert hasattr(golden, 'retrieval_context')
+        assert golden.retrieval_context == ["Document 1: API documentation", "Document 2: Implementation guide"]
+        
+        # Check expected_output override
+        assert golden.expected_output == "Found relevant documentation for your query"
+        
+        # Check expected_tools
+        assert len(golden.expected_tools) == 2
+        tool_names = [tool.name for tool in golden.expected_tools]
+        assert "search_docs" in tool_names
+        assert "retrieve_context" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_generate_from_contexts_without_retrieval_context(self, sample_synthesizer_config):
+        """Test that goldens without retrieval_context work normally"""
+        contexts_no_rag = [
+            {
+                "context": "Simple context without RAG",
+                "tools": ["basic_tool"]
+            }
+        ]
+        
+        mock_synthesizer = AsyncMock()
+        mock_golden = MagicMock()
+        mock_golden.input = "Simple query"
+        mock_golden.expected_output = "Simple response"
+        mock_golden.expected_tools = []
+        mock_synthesizer.a_generate_goldens_from_contexts.return_value = [mock_golden]
+
+        dataset = GoldenDataset("simple_test")
+
+        with patch('app.evaluation.dataset.Synthesizer', return_value=mock_synthesizer), \
+             patch('builtins.print'):
+            
+            await dataset.generate_from_contexts(contexts_no_rag, sample_synthesizer_config)
+
+        # Verify golden was created normally
+        assert len(dataset.goldens) == 1
+        golden = dataset.goldens[0]
+        
+        # Should not have retrieval_context set to a real value
+        # Note: MagicMock objects always have attributes, but the value should not be set
+        # Check that the context data didn't include retrieval_context
+        assert contexts_no_rag[0].get('retrieval_context') is None
+        
+        # Should have expected_tools
+        assert len(golden.expected_tools) == 1
+        assert golden.expected_tools[0].name == "basic_tool"
+
+    def test_to_dataframe_with_retrieval_context(self):
+        """Test DataFrame conversion includes retrieval_context when present"""
+        dataset = GoldenDataset("rag_dataframe_test")
+        
+        # Create mock golden with retrieval_context
+        mock_golden = MagicMock()
+        mock_golden.input = "RAG query"
+        mock_golden.expected_output = "RAG response"
+        mock_golden.context = ["RAG context"]
+        mock_golden.retrieval_context = ["Retrieved doc 1", "Retrieved doc 2"]
+        mock_tool = MagicMock()
+        mock_tool.name = "search_knowledge_base"
+        mock_golden.expected_tools = [mock_tool]
+        
+        dataset.goldens = [mock_golden]
+        
+        df = dataset.to_dataframe()
+        
+        # Verify basic structure
+        assert len(df) == 1
+        assert df.iloc[0]['input'] == "RAG query"
+        assert df.iloc[0]['expected_output'] == "RAG response"
+        assert df.iloc[0]['expected_tools'] == ['search_knowledge_base']
+        
+        # Note: retrieval_context is not included in basic to_dataframe since it's 
+        # only used during evaluation, not for dataset analysis

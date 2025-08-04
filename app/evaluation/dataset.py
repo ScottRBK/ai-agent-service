@@ -26,9 +26,13 @@ class GoldenDataset:
             if isinstance(context_data, ContextWithMetadata):
                 context = context_data.context
                 tools = context_data.tools
+                retrieval_context = context_data.retrieval_context
+                expected_output = context_data.expected_output
             else:
                 context = context_data["context"]
                 tools = context_data["tools"]
+                retrieval_context = context_data.get("retrieval_context")
+                expected_output = context_data.get("expected_output")
             
             goldens = await synthesizer.a_generate_goldens_from_contexts(
                 contexts=[context],
@@ -36,12 +40,18 @@ class GoldenDataset:
                 max_goldens_per_context=max_goldens_per_context
             )
             
-            # Add expected tools to each golden
+            # Add expected tools and RAG-specific fields to each golden
             for i, golden in enumerate(goldens):
                 print(f"  Golden {i+1}: {golden.input[:50]}...")
                 golden.expected_tools = [
                     ToolCall(name=tool) for tool in tools
                 ]
+                # Preserve RAG-specific fields if provided
+                if retrieval_context:
+                    golden.retrieval_context = retrieval_context
+                if expected_output:
+                    # Override synthesized expected_output with our specific one
+                    golden.expected_output = expected_output
             
             self.goldens.extend(goldens)
             print(f"\nTotal goldens generated: {len(self.goldens)}")

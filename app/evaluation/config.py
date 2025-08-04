@@ -8,6 +8,8 @@ class ContextWithMetadata(BaseModel):
     """Context with associated tool metadata"""
     context: List[str]
     tools: List[str]
+    expected_output: Optional[str] = None  # For contextual recall metric
+    retrieval_context: Optional[List[str]] = None  # For RAG metrics
 
 
 class SynthesizerConfig(BaseModel):

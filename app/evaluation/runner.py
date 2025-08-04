@@ -94,19 +94,25 @@ class EvaluationRunner:
         tool_calls = [ToolCall(name=tool["tool_name"]) for tool in agent.provider.get_tool_calls_made()]
         
         # Create test case
-        return LLMTestCase(
-            input=golden.input,
-            actual_output=response,
-            expected_output=golden.expected_output,
-            context=golden.context,
-            expected_tools=golden.expected_tools,
-            tools_called=tool_calls,
-            additional_metadata={
+        test_case_params = {
+            'input': golden.input,
+            'actual_output': response,
+            'expected_output': golden.expected_output,
+            'context': golden.context,
+            'expected_tools': golden.expected_tools,
+            'tools_called': tool_calls,
+            'additional_metadata': {
                 'agent_id': self.config.agent_id,
                 'expected_tool_names': [t.name for t in golden.expected_tools],
                 'actual_tool_names': [t.name for t in tool_calls]
             }
-        )
+        }
+        
+        # Add retrieval_context if present (for RAG metrics)
+        if hasattr(golden, 'retrieval_context') and golden.retrieval_context:
+            test_case_params['retrieval_context'] = golden.retrieval_context
+        
+        return LLMTestCase(**test_case_params)
     
     def _create_results_dataframe(self, results_json: Dict) -> pd.DataFrame:
         """Convert results to DataFrame"""

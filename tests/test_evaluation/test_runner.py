@@ -580,3 +580,169 @@ class TestEvaluationRunner:
             assert test_case.tools_called[2].name == "tool4"
             assert test_case.additional_metadata['expected_tool_names'] == ["tool1", "tool2", "tool3"]
             assert test_case.additional_metadata['actual_tool_names'] == ["tool1", "tool2", "tool4"]
+
+    @pytest.mark.asyncio
+    async def test_create_test_case_with_retrieval_context(self, runner):
+        """Test _create_test_case includes retrieval_context for RAG metrics"""
+        golden = Mock(spec=Golden)
+        golden.input = "What did we discuss about authentication?"
+        golden.expected_output = "Based on our previous discussion, use JWT tokens"
+        golden.context = ["Knowledge base context"]
+        golden.expected_tools = [ToolCall(name="search_knowledge_base")]
+        golden.retrieval_context = [
+            "Previous conversation: JWT authentication with 1-hour expiration",
+            "Security discussion: Use refresh tokens for extended sessions"
+        ]
+        
+        mock_agent = AsyncMock()
+        mock_agent.agent_id = runner.config.agent_id
+        mock_agent.initialize = AsyncMock()
+        mock_agent.chat = AsyncMock(return_value="Found information about JWT authentication from our previous discussion")
+        mock_agent.provider = Mock()
+        mock_agent.provider.config = Mock()
+        mock_agent.provider.get_tool_calls_made = Mock(return_value=[{"tool_name": "search_knowledge_base"}])
+        
+        with patch('app.evaluation.runner.CLIAgent', return_value=mock_agent):
+            test_case = await runner._create_test_case(golden)
+            
+            # Verify basic test case structure
+            assert isinstance(test_case, LLMTestCase)
+            assert test_case.input == "What did we discuss about authentication?"
+            assert test_case.actual_output == "Found information about JWT authentication from our previous discussion"
+            assert test_case.expected_output == "Based on our previous discussion, use JWT tokens"
+            assert test_case.context == ["Knowledge base context"]
+            
+            # Verify retrieval_context was included
+            assert hasattr(test_case, 'retrieval_context')
+            assert test_case.retrieval_context == [
+                "Previous conversation: JWT authentication with 1-hour expiration",
+                "Security discussion: Use refresh tokens for extended sessions"
+            ]
+            
+            # Verify tools
+            assert len(test_case.expected_tools) == 1
+            assert test_case.expected_tools[0].name == "search_knowledge_base"
+            assert len(test_case.tools_called) == 1
+            assert test_case.tools_called[0].name == "search_knowledge_base"
+
+    @pytest.mark.asyncio
+    async def test_create_test_case_without_retrieval_context(self, runner):
+        """Test _create_test_case works normally without retrieval_context"""
+        golden = Mock(spec=Golden)
+        golden.input = "What's the weather?"
+        golden.expected_output = "Sunny and warm"
+        golden.context = ["Weather context"]
+        golden.expected_tools = [ToolCall(name="get_weather")]
+        # No retrieval_context attribute
+        
+        mock_agent = AsyncMock()
+        mock_agent.agent_id = runner.config.agent_id
+        mock_agent.initialize = AsyncMock()
+        mock_agent.chat = AsyncMock(return_value="It's sunny today")
+        mock_agent.provider = Mock()
+        mock_agent.provider.config = Mock()
+        mock_agent.provider.get_tool_calls_made = Mock(return_value=[{"tool_name": "get_weather"}])
+        
+        with patch('app.evaluation.runner.CLIAgent', return_value=mock_agent):
+            test_case = await runner._create_test_case(golden)
+            
+            # Verify basic test case structure
+            assert isinstance(test_case, LLMTestCase)
+            assert test_case.input == "What's the weather?"
+            assert test_case.actual_output == "It's sunny today"
+            assert test_case.expected_output == "Sunny and warm"
+            
+            # Should not have retrieval_context
+            assert not hasattr(test_case, 'retrieval_context') or test_case.retrieval_context is None
+
+    @pytest.mark.asyncio
+    async def test_create_test_case_with_empty_retrieval_context(self, runner):
+        """Test _create_test_case handles empty retrieval_context"""
+        golden = Mock(spec=Golden)
+        golden.input = "Test query"
+        golden.expected_output = "Test response"
+        golden.context = ["Test context"]
+        golden.expected_tools = []
+        golden.retrieval_context = []  # Empty list
+        
+        mock_agent = AsyncMock()
+        mock_agent.agent_id = runner.config.agent_id
+        mock_agent.initialize = AsyncMock()
+        mock_agent.chat = AsyncMock(return_value="Test agent response")
+        mock_agent.provider = Mock()
+        mock_agent.provider.config = Mock()
+        mock_agent.provider.get_tool_calls_made = Mock(return_value=[])
+        
+        with patch('app.evaluation.runner.CLIAgent', return_value=mock_agent):
+            test_case = await runner._create_test_case(golden)
+            
+            # Should not include retrieval_context when it's empty
+            assert not hasattr(test_case, 'retrieval_context') or not test_case.retrieval_context
+
+    def test_create_results_dataframe_with_rag_metadata(self, runner):
+        """Test _create_results_dataframe handles RAG-specific fields"""
+        results = {
+            "test_results": [
+                {
+                    "name": "rag_test",
+                    "success": True,
+                    "input": "What did we discuss about microservices?",
+                    "actual_output": "Based on our previous discussions, microservices architecture includes service discovery and API gateways",
+                    "context": ["Knowledge base context"],
+                    "retrieval_context": [
+                        "Previous discussion: Service discovery with Consul",
+                        "Architecture notes: API gateway patterns"
+                    ],
+                    "additional_metadata": {
+                        "expected_tool_names": ["search_knowledge_base"],
+                        "actual_tool_names": ["search_knowledge_base"],
+                        "agent_id": "knowledge_agent"
+                    },
+                    "metrics_data": [
+                        {
+                            "name": "faithfulness",
+                            "success": True,
+                            "score": 0.9,
+                            "threshold": 0.7,
+                            "reason": "Response is faithful to retrieved context",
+                            "evaluation_model": "mistral:7b",
+                            "error": None,
+                            "verbose_logs": ""
+                        },
+                        {
+                            "name": "contextual_relevancy",
+                            "success": True,
+                            "score": 0.85,
+                            "threshold": 0.7,
+                            "reason": "Retrieved context is relevant to query",
+                            "evaluation_model": "mistral:7b",
+                            "error": None,
+                            "verbose_logs": ""
+                        }
+                    ]
+                }
+            ]
+        }
+        
+        df = runner._create_results_dataframe(results)
+        
+        # Verify DataFrame structure for RAG evaluation
+        assert len(df) == 2  # Two metrics
+        assert df.iloc[0]['test_name'] == 'rag_test'
+        assert df.iloc[0]['overall_success'] == True
+        assert df.iloc[0]['input'] == "What did we discuss about microservices?"
+        assert df.iloc[0]['context'] == "['Knowledge base context']"
+        
+        # Verify RAG-specific metrics
+        metric_names = df['metric_name'].tolist()
+        assert 'faithfulness' in metric_names
+        assert 'contextual_relevancy' in metric_names
+        
+        # Verify scores and reasons
+        faithfulness_row = df[df['metric_name'] == 'faithfulness'].iloc[0]
+        assert faithfulness_row['metric_score'] == 0.9
+        assert faithfulness_row['metric_reason'] == "Response is faithful to retrieved context"
+        
+        relevancy_row = df[df['metric_name'] == 'contextual_relevancy'].iloc[0]
+        assert relevancy_row['metric_score'] == 0.85
+        assert relevancy_row['metric_reason'] == "Retrieved context is relevant to query"

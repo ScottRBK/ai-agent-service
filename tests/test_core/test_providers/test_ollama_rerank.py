@@ -211,14 +211,14 @@ class TestOllamaReranking:
         """Test re-ranking when client is not initialized."""
         ollama_provider.client = None
         
-        with pytest.raises(NameError) as exc_info:
+        with pytest.raises(ProviderConnectionError) as exc_info:
             await ollama_provider.rerank(
                 "dengcao/Qwen3-Reranker-4B:Q8_0",
                 "test query",
                 ["doc1", "doc2"]
             )
         
-        assert "ProviderConnectionError" in str(exc_info.value)
+        assert "Ollama client not initialized" in str(exc_info.value)
     
     @pytest.mark.asyncio
     async def test_rerank_partial_failure(self, ollama_provider):
