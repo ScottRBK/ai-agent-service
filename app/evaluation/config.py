@@ -10,6 +10,8 @@ class ContextWithMetadata(BaseModel):
     tools: List[str]
     expected_output: Optional[str] = None  # For contextual recall metric
     retrieval_context: Optional[List[str]] = None  # For RAG metrics
+    user_id: Optional[str] = None  # User ID for this context's test case
+    session_id: Optional[str] = None  # Session ID for this context's test case
 
 
 class SynthesizerConfig(BaseModel):

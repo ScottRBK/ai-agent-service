@@ -8,11 +8,12 @@ methods
 - remove_provider: Removes a provider instance.
 """
 
-from app.models.providers import OllamaConfig, AzureOpenAIConfig
+from app.models.providers import OllamaConfig, AzureOpenAIConfig, OpenRouterConfig
 from app.core.providers.ollama import OllamaProvider
 from app.core.providers.azureopenapi import AzureOpenAIProvider
 from app.core.providers.azureopenapi_cc import AzureOpenAIProviderCC
 from app.core.providers.base import BaseProvider
+from app.core.providers.openrouter import OpenRouterProvider
 
 class ProviderManager:
     def __init__(self):
@@ -34,6 +35,12 @@ class ProviderManager:
                 "description": "Azure OpenAI Chat Completions API (Legacy)",
                 "class": AzureOpenAIProviderCC,
                 "config_class": AzureOpenAIConfig
+            },
+            "openrouter": {
+                "name": "OpenRouter",
+                "description": "OpenRouter (OpenAI-compatible API)",
+                "class": OpenRouterProvider,
+                "config_class": OpenRouterConfig
             }
         }
 

@@ -28,11 +28,15 @@ class GoldenDataset:
                 tools = context_data.tools
                 retrieval_context = context_data.retrieval_context
                 expected_output = context_data.expected_output
+                user_id = context_data.user_id
+                session_id = context_data.session_id
             else:
                 context = context_data["context"]
                 tools = context_data["tools"]
                 retrieval_context = context_data.get("retrieval_context")
                 expected_output = context_data.get("expected_output")
+                user_id = context_data.get("user_id")
+                session_id = context_data.get("session_id")
             
             goldens = await synthesizer.a_generate_goldens_from_contexts(
                 contexts=[context],
@@ -40,12 +44,20 @@ class GoldenDataset:
                 max_goldens_per_context=max_goldens_per_context
             )
             
-            # Add expected tools and RAG-specific fields to each golden
+            # Add expected tools, user/session IDs, and RAG-specific fields to each golden
             for i, golden in enumerate(goldens):
                 print(f"  Golden {i+1}: {golden.input[:50]}...")
                 golden.expected_tools = [
                     ToolCall(name=tool) for tool in tools
                 ]
+                # Preserve user and session IDs in additional_metadata if provided
+                if user_id or session_id:
+                    if not hasattr(golden, 'additional_metadata') or golden.additional_metadata is None:
+                        golden.additional_metadata = {}
+                    if user_id:
+                        golden.additional_metadata['user_id'] = user_id
+                    if session_id:
+                        golden.additional_metadata['session_id'] = session_id
                 # Preserve RAG-specific fields if provided
                 if retrieval_context:
                     golden.retrieval_context = retrieval_context

@@ -33,11 +33,11 @@ class CLIAgent(BaseAgent):
             await self.initialize()
         
         conversation_history = await self.load_memory()
-        conversation_history.append({"role": "user", "content": user_input})
+        await self.save_memory("user", user_input)
 
         full_response = ""
         async for chunk in self.provider.send_chat_with_streaming(
-            context=conversation_history,
+            context=[*conversation_history, {"role": "user", "content": user_input}],
             model=self.model,
             instructions=self.system_prompt,
             agent_id=self.agent_id,
@@ -46,9 +46,11 @@ class CLIAgent(BaseAgent):
             full_response += chunk
             yield chunk
 
+        # Post-stream tasks that should not print to stdout; they use logging (stderr)
         clean_response = self._clean_response_for_memory(full_response)
         await self.save_memory("assistant", clean_response)
         
+
         await self._trigger_memory_compression()
 
     async def chat_with_memory(self, user_input: str) -> str:
@@ -57,10 +59,9 @@ class CLIAgent(BaseAgent):
             await self.initialize()
         
         conversation_history = await self.load_memory()
-        # Add user message to history
+        
         await self.save_memory("user", user_input)     
 
-        # Get response from provider
         response = await self.provider.send_chat(
             context=[*conversation_history, {"role": "user", "content": user_input}],
             model=self.model,
@@ -69,7 +70,6 @@ class CLIAgent(BaseAgent):
             model_settings=self.model_settings
         )
         
-        # Add assistant response to history
         clean_response = self._clean_response_for_memory(response)
         await self.save_memory("assistant", clean_response)
 
@@ -146,13 +146,15 @@ class CLIAgent(BaseAgent):
                 
                 print("🤔 Thinking...")
                 if stream:
+                    # Ensure visual separation before streamed tokens begin
+                    print("", flush=True)
                     if self.memory:
                         async for chunk in self.chat_stream_with_memory(user_input):
                             print(chunk, end="", flush=True)
                     else:
                         async for chunk in self.chat_stream(user_input):
                             print(chunk, end="", flush=True)
-                    print("\n")  # Add newline after streaming
+                    print("\n", flush=True)  # Add newline after streaming
                 else:
                     response = await self.chat(user_input)
                     print(f"🤖 {self.agent_id}: {response}\n")

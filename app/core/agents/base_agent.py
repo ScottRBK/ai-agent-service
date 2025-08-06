@@ -4,6 +4,8 @@ Memory functionality is optional and configuration-driven.
 Uses direct composition instead of complex manager layers.
 """
 
+import asyncio
+
 from typing import Optional, Dict, Any, List, AsyncGenerator
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.providers.manager import ProviderManager
@@ -293,6 +295,7 @@ class BaseAgent:
     async def _trigger_memory_compression(self):
         """Trigger memory compression when threshold is reached"""
         if not self.memory:
+            logger.debug("Memory compression skipped: no memory resource attached")
             return
         
         memory_config = self._get_resource_config("memory")
@@ -303,6 +306,7 @@ class BaseAgent:
         })
         
         if not compression_config.get("enabled", True):
+            logger.debug("Memory compression skipped: compression disabled via config")
             return
             
         try:
@@ -311,20 +315,24 @@ class BaseAgent:
             
             # Pass knowledge base resource if archival is enabled
             knowledge_base_resource = None
+            
             if compression_config.get("archive_conversations", False) and self.knowledge_base:
                 knowledge_base_resource = self.knowledge_base
             
             memory_compression_agent = MemoryCompressionAgent()
-            await memory_compression_agent.compress_conversation(
+            asyncio.create_task(memory_compression_agent.compress_conversation(
                 parent_agent_id=self.agent_id,
                 compression_config=compression_config,
                 user_id=self.user_id,
                 session_id=self.session_id,
                 parent_memory_resource=self.memory,
                 knowledge_base_resource=knowledge_base_resource  # New parameter
+                )
             )
+
         except Exception as e:
-            logger.error(f"Error during memory compression: {e}")
+            logger.error(f"Error triggering memory compression for agent {self.agent_id}: {e}")
+
     
     def _should_search_cross_session(self, user_message: str) -> bool:
         """Determine if cross-session search is needed"""

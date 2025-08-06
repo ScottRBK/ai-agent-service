@@ -142,8 +142,20 @@ class OllamaProvider(BaseProvider):
             if not tool_calls_to_process:
                 break
 
-            tool_count = await self._execute_tool_calls(messages, tool_calls_to_process, agent_id)
-            total_tool_iterations += tool_count
+            try:
+
+                tool_result = await self._execute_tool_calls(messages, tool_calls_to_process, agent_id)
+                logger.info(f"OllamaProvider - executed {tool_result} tools")
+                messages.append({
+                    "role": "tool",
+                    "content": str(tool_result)
+                })
+            
+                total_tool_iterations += 1
+
+            except Exception as e:
+                logger.error(f"OllamaProvider - error executing tool calls: {e}")
+                continue
 
         if total_tool_iterations >= self.max_tool_iterations:
             logger.error(f"OllamaProvider - max tool iterations reached: {total_tool_iterations}")

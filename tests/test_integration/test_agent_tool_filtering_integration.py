@@ -9,7 +9,7 @@ from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.agents.prompt_manager import PromptManager
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
+@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_research_agent_tool_filtering(provider_id, caplog):
     """Test test_research_agent with specific tool access."""
     caplog.set_level(logging.INFO)
@@ -53,7 +53,7 @@ async def test_research_agent_tool_filtering(provider_id, caplog):
         await provider.cleanup()
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
+@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_restricted_agent_tool_filtering(provider_id, caplog):
     """Test test_restricted_agent with limited tool access."""
     caplog.set_level(logging.INFO)
@@ -97,7 +97,7 @@ async def test_restricted_agent_tool_filtering(provider_id, caplog):
         await provider.cleanup()
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
+@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_mcp_agent_tool_filtering(provider_id, caplog):
     """Test test_mcp_agent with only MCP tools."""
     caplog.set_level(logging.INFO)
@@ -141,7 +141,7 @@ async def test_mcp_agent_tool_filtering(provider_id, caplog):
         await provider.cleanup()
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
+@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_regular_tools_only_agent_tool_filtering(provider_id, caplog):
     """Test test_regular_tools_only_agent with only regular tools."""
     caplog.set_level(logging.INFO)
@@ -185,7 +185,7 @@ async def test_regular_tools_only_agent_tool_filtering(provider_id, caplog):
         await provider.cleanup()
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
+@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_cli_agent_tool_filtering(provider_id, caplog):
     """Test test_cli_agent with full tool access."""
     caplog.set_level(logging.INFO)
@@ -229,7 +229,7 @@ async def test_cli_agent_tool_filtering(provider_id, caplog):
         await provider.cleanup()
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
+@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_agent_tool_manager_direct_test(provider_id, caplog):
     """Test AgentToolManager directly to verify tool filtering."""
     caplog.set_level(logging.INFO)
@@ -290,7 +290,7 @@ async def test_agent_tool_manager_direct_test(provider_id, caplog):
                 assert not any("deepwiki__" in tool["function"]["name"] for tool in available_tools)
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai"])
+@pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_provider_tool_integration_bad_tools(provider_id):
     """Test error handling when tools are requested but not available to the agent."""
     manager = ProviderManager()

@@ -15,6 +15,7 @@ class ProviderType(str, Enum):
     OPENAI = "openai"
     AZURE_OPENAI = "azure_openai"
     AZURE_OPENAI_CC = "azure_openai_cc" # Azure OpenAI Chat Completions
+    OPENROUTER = "openrouter"
 
 class ProviderConfig(BaseModel):
     """Base configuration for all LLM providers"""
@@ -44,6 +45,15 @@ class OpenAIConfig(ProviderConfig):
     base_url: str = "https://api.openai.com/v1"
     default_model: str = "gpt-4o-mini"
     model_list: list[str] = ["gpt-4o-mini", "gpt-4o"]
+
+class OpenRouterConfig(ProviderConfig):
+    "OpenRouter-specific configuration"
+    name: str = "OpenRouter"
+    provider_type: ProviderType = ProviderType.OPENROUTER
+    base_url: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    default_model: str = os.getenv("OPENROUTER_DEFAULT_MODEL", "openrouter/auto")
+    model_list: list[str] = os.getenv("OPENROUTER_MODEL_LIST", "openrouter/auto").split(",")
+    api_key: str = os.getenv("OPENROUTER_API_KEY", "")
 
 class AzureOpenAIConfig(ProviderConfig):
     "Azure-OpenAI-specific configuration"

@@ -5,6 +5,7 @@ from deepeval.models import OllamaModel
 
 from app.evaluation.config import EvaluationConfig, SynthesizerConfig, ContextWithMetadata
 from app.evaluation.runner import EvaluationRunner
+from app.config.settings import settings
 
 import asyncio
 import argparse

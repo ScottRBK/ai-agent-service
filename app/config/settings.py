@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_DEFAULT_MODEL: str = "qwen3:4b"
 
+    # OpenRouter Configuration
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_DEFAULT_MODEL: str = "openrouter/auto"
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL_LIST: str = "openrouter/auto"
+
     # PostgreSQL configuration
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432

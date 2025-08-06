@@ -81,9 +81,15 @@ class EvaluationRunner:
         """Create a test case by running the agent"""
         #TODO: Use the agent factory to get the agent
         agent = CLIAgent(self.config.agent_id)
-        # Initialize agent and create a new session to isolate evaluation
-        agent.session_id = str(uuid.uuid4())
-        agent.user_id = f"test_user_{uuid.uuid4()}"
+        
+        # Use context-specific IDs from additional_metadata if available, otherwise generate new ones
+        if hasattr(golden, 'additional_metadata') and golden.additional_metadata:
+            agent.user_id = golden.additional_metadata.get('user_id', f"test_user_{uuid.uuid4()}")
+            agent.session_id = golden.additional_metadata.get('session_id', str(uuid.uuid4()))
+        else:
+            agent.user_id = f"test_user_{uuid.uuid4()}"
+            agent.session_id = str(uuid.uuid4())
+        
         await agent.initialize()    
         agent.provider.config.track_tool_calls = True
         

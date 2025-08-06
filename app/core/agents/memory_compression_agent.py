@@ -96,7 +96,7 @@ class MemoryCompressionAgent(BaseAgent):
         summary_body = summary
         summary = f"{summary_header}\n\n{summary_body}"
 
-        logger.info(f"MemoryCompressionAgent- compress_conversation - Summary Created")
+        logger.debug(f"MemoryCompressionAgent- compress_conversation - Summary Created")
 
         # Store summary
         await parent_memory_resource.store_session_summary(MemorySessionSummary(
@@ -105,10 +105,10 @@ class MemoryCompressionAgent(BaseAgent):
             agent_id=parent_agent_id,
             summary=summary
         ))
-        logger.info(f"MemoryCompressionAgent- compress_conversation - Summary Stored")
+        logger.debug(f"MemoryCompressionAgent- compress_conversation - Summary Stored")
         for message in older_messages:
             await parent_memory_resource.delete_memory(message.id)
-        logger.info(f"MemoryCompressionAgent- compress_conversation - Older messages deleted")
+        logger.debug(f"MemoryCompressionAgent- compress_conversation - Older messages deleted")
     
     async def _create_summary(self, messages: List[Dict[str, str]], existing_summary: str, 
                          compression_manager: MemoryCompressionManager,

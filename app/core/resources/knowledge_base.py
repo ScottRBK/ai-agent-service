@@ -208,9 +208,11 @@ class KnowledgeBaseResource(BaseResource):
                 doc_types=doc_types,
                 limit=search_limit
             )
-            
+            logger.debug(f"KnowledgeBase - search - filters: {filters}")
             # Stage 1: Vector similarity search
             results = await self.vector_provider.search_similar(query_embedding, filters)
+            logger.debug(f"KnowledgeBase - search - initial results: {len(results)} found")
+
             
             # Stage 2: Optional reranking
             if use_reranking and self.rerank_provider and self.rerank_model and len(results) > limit:
