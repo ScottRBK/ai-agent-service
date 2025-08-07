@@ -14,6 +14,7 @@ from deepeval.models import OllamaModel
 
 from app.evaluation.config import EvaluationConfig, SynthesizerConfig, ContextWithMetadata
 from app.evaluation.runner import EvaluationRunner
+from app.evaluation.custom_ollama import CustomOllamaModel
 from app.core.agents.cli_agent import CLIAgent
 from app.models.resources.knowledge_base import DocumentType
 from app.utils.logging import logger
@@ -227,11 +228,11 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
     # Could add test_user_2 for isolation testing if needed
     
     # Separate models for synthesis and evaluation
-    # Synthesis model - smaller/faster for generating test cases
+    # Synthesis model - smaller/faster for generating test cases (keep OllamaModel for synthesis)
     synthesis_model = OllamaModel(model="qwen3:4b", temperature=0.7, base_url=settings.OLLAMA_BASE_URL)
     
-    # Evaluation model - larger/more capable for scoring metrics
-    evaluation_model = OllamaModel(model="qwen3:8b", temperature=0.2, base_url=settings.OLLAMA_BASE_URL)
+    # Evaluation model - use CustomOllamaModel with JSON enforcement for metrics
+    evaluation_model = CustomOllamaModel(model="qwen3:4b", temperature=0.0, base_url=settings.OLLAMA_BASE_URL)
     
     # Styling configuration for synthesizer
     styling_config = StylingConfig(
@@ -366,17 +367,17 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
             threshold=0.7
         )
         ,
-        # GEval(
-        #     name="search_effectiveness",
-        #     criteria="Did the agent use the appropriate search parameters and retrieve relevant information for the user's query?",
-        #     evaluation_params=[
-        #         LLMTestCaseParams.INPUT,
-        #         LLMTestCaseParams.ACTUAL_OUTPUT,
-        #         LLMTestCaseParams.TOOLS_CALLED
-        #     ],
-        #     model=evaluation_model,
-        #     threshold=0.8
-        # )
+        GEval(
+            name="search_effectiveness",
+            criteria="Did the agent use the appropriate search parameters and retrieve relevant information for the user's query?",
+            evaluation_params=[
+                LLMTestCaseParams.INPUT,
+                LLMTestCaseParams.ACTUAL_OUTPUT,
+                LLMTestCaseParams.TOOLS_CALLED
+            ],
+            model=evaluation_model,
+            threshold=0.8
+        )
     ]
     
     # Create complete configuration

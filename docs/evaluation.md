@@ -232,6 +232,8 @@ The evaluation framework integrates seamlessly with the agent architecture:
 ## Advanced Usage
 
 ### Custom Evaluation Models
+
+#### Standard DeepEval Models
 Use different models for evaluation:
 ```python
 from deepeval.models import AzureOpenAI
@@ -241,6 +243,44 @@ eval_model = AzureOpenAI(
     azure_api_version="2024-02-01"
 )
 ```
+
+#### CustomOllamaModel with Instructor Integration
+For evaluations requiring strict JSON schema compliance and structured outputs, use the `CustomOllamaModel`:
+
+```python
+from app.evaluation.custom_ollama import CustomOllamaModel
+
+# Initialize with robust JSON output capabilities
+eval_model = CustomOllamaModel(
+    model="mistral:7b",
+    base_url="http://localhost:11434",  # Automatically converts to OpenAI-compatible endpoint
+    temperature=0.0  # For deterministic evaluation results
+)
+```
+
+**When to Use CustomOllamaModel:**
+- Evaluations that require structured JSON responses with strict schema adherence
+- Metrics that need validated Pydantic model outputs
+- Scenarios where evaluation consistency is critical and fallback behavior is preferred over failures
+- Local evaluations where you want the reliability of instructor's JSON confinement
+
+**Example with Schema Validation:**
+```python
+from pydantic import BaseModel
+from typing import List
+
+class EvaluationResponse(BaseModel):
+    score: float
+    reasoning: str
+    criteria_met: List[str]
+
+# The model will enforce this schema automatically
+eval_model = CustomOllamaModel("qwen3:8b", temperature=0.0)
+response = eval_model.generate(prompt, schema=EvaluationResponse)
+# response is guaranteed to be a valid EvaluationResponse instance
+```
+
+**Note**: CustomOllamaModel is particularly useful for metrics that require structured outputs and provides more reliable JSON parsing compared to the standard OllamaModel, especially when working with local models that may have inconsistent JSON formatting.
 
 ### Batch Evaluations
 Evaluate multiple agents:
