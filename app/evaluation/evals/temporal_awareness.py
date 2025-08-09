@@ -40,13 +40,6 @@ def create_evaluation_config() -> EvaluationConfig:
     
     metrics = [
         ToolCorrectnessMetric(),
-        # GEval(
-        #     name="recent-information-correctness",
-        #     criteria=f"""Does the actual output contain the same factual information as the expected output?""",
-        #     evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-        #     model=evaluation_model
-            
-        # )
         ContextualRelevancyMetric(
             threshold=0.7,
             model=evaluation_model,
