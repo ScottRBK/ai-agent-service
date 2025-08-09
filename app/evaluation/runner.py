@@ -48,7 +48,6 @@ class EvaluationRunner:
     async def run_evaluation(self) -> Dict[str, Any]:
         """Run evaluation for the configured agent"""
         
-        
         # Create test cases
         test_cases = []
         for i, golden in enumerate(self.dataset.goldens):

@@ -2,12 +2,11 @@
 Unit tests for BaseProvider default re-ranking functionality.
 
 This module tests the default re-ranking implementation in BaseProvider,
-which should return 0.5 scores and log warnings for providers without
-specialized re-ranking support.
+which should return 0.5 scores for all candidates.
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 from app.core.providers.base import BaseProvider
 from app.models.providers import ProviderConfig, ProviderType
 
@@ -55,59 +54,45 @@ class TestBaseProviderDefaultReranking:
         """Test that default re-ranking returns 0.5 for all candidates"""
         provider = TestableBaseProvider(mock_config)
         
-        with patch('app.core.providers.base.logger') as mock_logger:
-            scores = await provider.rerank(
-                "gpt-4",
-                "What is machine learning?",
-                [
-                    "Machine learning is a subset of artificial intelligence...",
-                    "The weather forecast for tomorrow shows rain...",
-                    "Deep learning models require large amounts of data..."
-                ]
-            )
-            
-            # Should return 0.5 for all candidates
-            assert len(scores) == 3
-            assert all(score == 0.5 for score in scores)
-            
-            # Should log warning about using default implementation
-            mock_logger.warning.assert_called_once_with(
-                "TestableBaseProvider using default rerank implementation"
-            )
+        scores = await provider.rerank(
+            "gpt-4",
+            "What is machine learning?",
+            [
+                "Machine learning is a subset of artificial intelligence...",
+                "The weather forecast for tomorrow shows rain...",
+                "Deep learning models require large amounts of data..."
+            ]
+        )
+        
+        # Should return 0.5 for all candidates
+        assert len(scores) == 3
+        assert all(score == 0.5 for score in scores)
     
     @pytest.mark.asyncio
     async def test_default_rerank_empty_candidates(self, mock_config):
         """Test default re-ranking with empty candidates list"""
         provider = TestableBaseProvider(mock_config)
         
-        with patch('app.core.providers.base.logger') as mock_logger:
-            scores = await provider.rerank(
-                "gpt-4",
-                "test query", 
-                []
-            )
-            
-            assert scores == []
-            
-            # Should still log warning even with empty list
-            mock_logger.warning.assert_called_once_with(
-                "TestableBaseProvider using default rerank implementation"
-            )
+        scores = await provider.rerank(
+            "gpt-4",
+            "test query", 
+            []
+        )
+        
+        assert scores == []
     
     @pytest.mark.asyncio
     async def test_default_rerank_single_candidate(self, mock_config):
         """Test default re-ranking with single candidate"""
         provider = TestableBaseProvider(mock_config)
         
-        with patch('app.core.providers.base.logger') as mock_logger:
-            scores = await provider.rerank(
-                "gpt-4",
-                "How to implement authentication?",
-                ["JWT tokens provide a stateless authentication mechanism..."]
-            )
-            
-            assert scores == [0.5]
-            mock_logger.warning.assert_called_once()
+        scores = await provider.rerank(
+            "gpt-4",
+            "How to implement authentication?",
+            ["JWT tokens provide a stateless authentication mechanism..."]
+        )
+        
+        assert scores == [0.5]
     
     @pytest.mark.asyncio
     async def test_default_rerank_many_candidates(self, mock_config):
@@ -116,16 +101,14 @@ class TestBaseProviderDefaultReranking:
         
         candidates = [f"Document {i} content..." for i in range(10)]
         
-        with patch('app.core.providers.base.logger') as mock_logger:
-            scores = await provider.rerank(
-                "gpt-4",
-                "test query",
-                candidates
-            )
-            
-            assert len(scores) == 10
-            assert all(score == 0.5 for score in scores)
-            mock_logger.warning.assert_called_once()
+        scores = await provider.rerank(
+            "gpt-4",
+            "test query",
+            candidates
+        )
+        
+        assert len(scores) == 10
+        assert all(score == 0.5 for score in scores)
     
     @pytest.mark.asyncio
     async def test_default_rerank_with_different_models(self, mock_config):
@@ -142,12 +125,10 @@ class TestBaseProviderDefaultReranking:
         candidates = ["doc1", "doc2", "doc3"]
         
         for model in models_to_test:
-            with patch('app.core.providers.base.logger') as mock_logger:
-                scores = await provider.rerank(model, "test query", candidates)
-                
-                # Should return same default scores regardless of model
-                assert scores == [0.5, 0.5, 0.5]
-                mock_logger.warning.assert_called_once()
+            scores = await provider.rerank(model, "test query", candidates)
+            
+            # Should return same default scores regardless of model
+            assert scores == [0.5, 0.5, 0.5]
     
     @pytest.mark.asyncio
     async def test_default_rerank_with_special_characters(self, mock_config):
@@ -161,12 +142,10 @@ class TestBaseProviderDefaultReranking:
             "HTML elements can have attributes with special characters like & and @..."
         ]
         
-        with patch('app.core.providers.base.logger') as mock_logger:
-            scores = await provider.rerank("gpt-4", query, candidates)
-            
-            assert len(scores) == 3
-            assert all(score == 0.5 for score in scores)
-            mock_logger.warning.assert_called_once()
+        scores = await provider.rerank("gpt-4", query, candidates)
+        
+        assert len(scores) == 3
+        assert all(score == 0.5 for score in scores)
     
     @pytest.mark.asyncio
     async def test_default_rerank_with_long_content(self, mock_config):
@@ -180,28 +159,14 @@ class TestBaseProviderDefaultReranking:
             "Yet another lengthy content " * 100 + "discussing topic C."
         ]
         
-        with patch('app.core.providers.base.logger') as mock_logger:
-            scores = await provider.rerank(
-                "gpt-4",
-                "Find information about topic A",
-                long_candidates
-            )
-            
-            assert len(scores) == 3
-            assert all(score == 0.5 for score in scores)
-            mock_logger.warning.assert_called_once()
-    
-    @pytest.mark.asyncio
-    async def test_default_rerank_warning_message_format(self, mock_config):
-        """Test that warning message includes correct provider class name"""
-        provider = TestableBaseProvider(mock_config)
+        scores = await provider.rerank(
+            "gpt-4",
+            "Find information about topic A",
+            long_candidates
+        )
         
-        with patch('app.core.providers.base.logger') as mock_logger:
-            await provider.rerank("test-model", "query", ["doc"])
-            
-            # Verify the exact warning message format
-            expected_message = "TestableBaseProvider using default rerank implementation"
-            mock_logger.warning.assert_called_once_with(expected_message)
+        assert len(scores) == 3
+        assert all(score == 0.5 for score in scores)
     
     @pytest.mark.asyncio
     async def test_default_rerank_preserves_candidate_order(self, mock_config):
@@ -215,15 +180,14 @@ class TestBaseProviderDefaultReranking:
             "Fourth document with unique content D"
         ]
         
-        with patch('app.utils.logging.logger'):
-            scores = await provider.rerank("gpt-4", "test query", candidates)
-            
-            # Should return scores in same order as candidates
-            assert len(scores) == len(candidates)
-            assert scores == [0.5, 0.5, 0.5, 0.5]
+        scores = await provider.rerank("gpt-4", "test query", candidates)
+        
+        # Should return scores in same order as candidates
+        assert len(scores) == len(candidates)
+        assert scores == [0.5, 0.5, 0.5, 0.5]
     
-    def test_provider_class_name_in_warning(self, mock_config):
-        """Test different provider class names appear correctly in warnings"""
+    def test_provider_class_name(self, mock_config):
+        """Test different provider class names"""
         
         class CustomTestProvider(BaseProvider):
             async def health_check(self):

@@ -4,13 +4,14 @@ Integrates with the Azure OpenAI API.
 """
 
 import importlib.metadata
-from app.core.providers.base import BaseProvider, ProviderMaxToolIterationsError
+from app.core.providers.base import BaseProvider
 from app.models.health import HealthStatus
 from app.models.providers import AzureOpenAIConfig
 from app.models.tools.tools import Tool
 from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.utils.logging import logger
+from app.utils.retry_utils import retry_with_exponential_backoff
 from openai import AsyncAzureOpenAI
 from datetime import datetime
 from pydantic import ValidationError
@@ -166,7 +167,7 @@ class AzureOpenAIProvider(BaseProvider):
             try:
                 request_params = self._prepare_request_params(model, instructions, local_context, available_tools, model_settings)
                 request_params["stream"] = True
-                response = await self.client.responses.create(**request_params)
+                response = await self._create_response(**request_params)
                 await self.record_successful_call()
 
             except Exception as e:
@@ -197,8 +198,25 @@ class AzureOpenAIProvider(BaseProvider):
             total_tool_iterations += tool_count
 
         if total_tool_iterations >= self.max_tool_iterations:
-            logger.error(f"AzureOpenAIProvider - _handle_tool_calls_streaming - max tool iterations reached: {total_tool_iterations}")
-            yield f"Warning: Maximum tool iterations ({self.max_tool_iterations}) reached. Some tools may not have been executed."
+            logger.warning(f"AzureOpenAIProvider - _handle_tool_calls_streaming - max tool iterations reached: {total_tool_iterations}")
+            local_context.append({
+                "role": "system",
+                "content": "Max tool iterations reached, stopping further processing."
+            })
+            response = await self._create_response(
+                model=model,
+                instructions=instructions,
+                input=local_context,
+                stream=True,
+                **(model_settings if model_settings else {})
+            )
+
+            async for chunk_type, content, tool_calls in self._process_streaming_response(response):
+                if chunk_type == "content":
+                    yield content
+                elif chunk_type == "error":
+                    yield content
+                    return
 
     async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
@@ -207,13 +225,11 @@ class AzureOpenAIProvider(BaseProvider):
         logger.debug(f"AzureOpenAIProvider - send_chat - available tools: {available_tools}")
 
         request_params = self._prepare_request_params(model, instructions, context, available_tools, model_settings)
-        response = await self.client.responses.create(**request_params)
-        
+        response = await self._create_response(**request_params)
+        max_tools_messages = []
         total_tool_iterations = 0
         while total_tool_iterations < self.max_tool_iterations:
-            total_tool_iterations += 1
-            tool_messages = []  
-            
+            tool_messages = [] 
             function_call_outputs = []
             for output in response.output:
 
@@ -223,23 +239,36 @@ class AzureOpenAIProvider(BaseProvider):
                     tool_messages.append(output)
             
             if function_call_outputs:
-                await self._execute_tool_calls(tool_messages, function_call_outputs, agent_id)
+                total_tool_iterations += await self._execute_tool_calls(tool_messages, function_call_outputs, agent_id)
 
             if tool_messages:
-                response = await self.client.responses.create(
+                max_tools_messages.append(tool_messages)
+                response = await self._create_response(
                     model=model,
                     instructions=instructions,
                     input=tool_messages,
                     tools=available_tools
                 )
                 await self.record_successful_call()
-
+                
             else:
                 break
+
+    
                 
         if total_tool_iterations >= self.max_tool_iterations:
-            logger.error(f"""AzureOpenAIProvider - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
-            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+            logger.warning(f"""AzureOpenAIProvider - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
+            max_tools_messages.append({
+                "role": "system",
+                "content": """Max tool calls reached."""
+            })
+
+            response = await self._create_response(
+                model=model,
+                instructions=instructions,
+                input=max_tools_messages,
+                **(model_settings if model_settings else {})  
+            )
 
         return response.output_text
 
@@ -342,3 +371,8 @@ class AzureOpenAIProvider(BaseProvider):
     
     async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
         return await super().rerank(model, query, candidates)
+
+    @retry_with_exponential_backoff(max_retries=5, initial_delay=60.0)
+    async def _create_response(self, **kwargs):
+        """Helper method to wrap API calls with retry logic."""
+        return await self.client.responses.create(**kwargs)

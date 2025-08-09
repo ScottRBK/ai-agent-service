@@ -53,6 +53,12 @@ AZURE_OPENAI_API_KEY=your_azure_key
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 OLLAMA_BASE_URL=http://localhost:11434
 
+# OpenRouter Configuration
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_DEFAULT_MODEL=openrouter/auto
+OPENROUTER_MODEL_LIST=openrouter/auto,meta-llama/llama-3.1-8b-instruct,openai/gpt-4
+
 # MCP Server Tokens (Dynamic Substitution)
 GITHUB_TOKEN=your_github_token
 DEEPWIKI_API_KEY=your_deepwiki_key
@@ -67,6 +73,11 @@ MEMORY_CLEANUP_INTERVAL_HOURS=24
 # Tool Configuration
 MCP_TOOL_CACHE_TTL=3600
 TOOL_EXECUTION_TIMEOUT=30
+
+# Evaluation Configuration
+EVALUATION_OUTPUT_DIR=evaluations/output
+DEEPEVAL_TELEMETRY_OPT_OUT=NO  # Set to YES to disable telemetry to Confident AI
+CONFIDENT_TRACING_ENABLED=true  # Set to false to disable tracing for Confident AI
 
 # Performance Tuning
 MAX_CONCURRENT_REQUESTS=100

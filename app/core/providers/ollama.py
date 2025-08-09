@@ -1,6 +1,6 @@
 import importlib.metadata
 import json
-from app.core.providers.base import BaseProvider, ProviderMaxToolIterationsError, ProviderConnectionError
+from app.core.providers.base import BaseProvider, ProviderConnectionError
 from app.models.health import HealthStatus
 from app.models.providers import OllamaConfig
 from app.models.tools.tools import Tool
@@ -101,10 +101,19 @@ class OllamaProvider(BaseProvider):
                     },
                 }],
             })
-            tool_result = await self.execute_tool_call(tool_call.function.name, tool_call.function.arguments, agent_id)               
+            try:
+                tool_result = await self.execute_tool_call(tool_call.function.name, tool_call.function.arguments, agent_id)
+                result_payload = str(tool_result)
+            except Exception as e:
+                logger.error(f"OllamaProvider - tool execution error for {tool_call.function.name}: {e}")
+                result_payload = json.dumps({
+                    "error": str(e),
+                    "tool": tool_call.function.name,
+                    "arguments": tool_call.function.arguments
+                })
             messages.append({
                 "role": "tool",
-                "content": str(tool_result)
+                "content": str(result_payload)
             })
             tool_count += 1
         return tool_count
@@ -144,22 +153,34 @@ class OllamaProvider(BaseProvider):
 
             try:
 
-                tool_result = await self._execute_tool_calls(messages, tool_calls_to_process, agent_id)
-                logger.info(f"OllamaProvider - executed {tool_result} tools")
-                messages.append({
-                    "role": "tool",
-                    "content": str(tool_result)
-                })
+                tool_count = await self._execute_tool_calls(messages, tool_calls_to_process, agent_id)
+                logger.info(f"OllamaProvider - executed {tool_count} tools")
             
-                total_tool_iterations += 1
+                total_tool_iterations += tool_count
 
             except Exception as e:
                 logger.error(f"OllamaProvider - error executing tool calls: {e}")
                 continue
 
         if total_tool_iterations >= self.max_tool_iterations:
-            logger.error(f"OllamaProvider - max tool iterations reached: {total_tool_iterations}")
-            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+            logger.warning(f"OllamaProvider - max tool iterations reached: {total_tool_iterations}")
+            messages.append({
+                "role": "system",
+                "content": """Max tool iterations reached, stopping further processing.
+                              If appropriate please respond to the user with the information
+                              you have gathered so far."""
+            })
+
+            response = await self.client.chat(
+                model=model,
+                messages=messages,
+                options=model_settings if model_settings else {},
+                stream=True
+            )
+
+            async for chunk_type, content, tool_calls in self._process_streaming_response(response):
+                if chunk_type == "content":
+                    yield content        
     
     async def send_chat_with_streaming(self, context: list, model: str, 
                         instructions: str, 
@@ -213,8 +234,7 @@ class OllamaProvider(BaseProvider):
                 
                 messages.append(response.message)
 
-                tool_count = await self._execute_tool_calls(messages, response.message.tool_calls, agent_id)
-                total_tool_iterations += tool_count
+                total_tool_iterations += await self._execute_tool_calls(messages, response.message.tool_calls, agent_id)
 
                 request_params["messages"] = messages
                 response: ChatResponse = await self.client.chat(**request_params)
@@ -224,8 +244,17 @@ class OllamaProvider(BaseProvider):
                 break
 
         if total_tool_iterations >= self.max_tool_iterations:
-            logger.error(f"""OllamaProvider - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
-            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+            logger.warning(f"OllamaProvider - max tool iterations reached: {total_tool_iterations}")
+            request_params["messages"].append({
+                "role": "system",
+                "content": """Max tool calls reached."""
+            })
+
+            response: ChatResponse = await self.client.chat(
+                model=model,
+                messages=request_params["messages"],
+                options=model_settings if model_settings else {}
+            )
 
         logger.debug(f"""OllamaProvider - send_chat - completed Total Requests: {self.total_requests}""")
         return response.message.content

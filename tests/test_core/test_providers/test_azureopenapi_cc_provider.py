@@ -672,11 +672,10 @@ class TestHandleToolCallsStreamingCC:
 
     @pytest.mark.asyncio
     async def test_handle_tool_calls_streaming_max_iterations(self):
-        """Test max iterations handling"""
+        """Test max iterations graceful handling"""
         # Arrange
         from app.core.providers.azureopenapi_cc import AzureOpenAIProviderCC
         from app.models.providers import AzureOpenAIConfig
-        from app.core.providers.base import ProviderMaxToolIterationsError
         
         config = AzureOpenAIConfig(
             name="test-provider",
@@ -690,8 +689,8 @@ class TestHandleToolCallsStreamingCC:
         provider.max_tool_iterations = 1
         provider.execute_tool_call = AsyncMock(return_value="result")
         
-        # Mock response that always returns tool calls
-        async def mock_response():
+        # First response with tool calls (triggers limit)
+        async def mock_first_response():
             chunk = MagicMock()
             chunk.choices = [MagicMock()]
             chunk.choices[0].delta.content = None
@@ -702,17 +701,45 @@ class TestHandleToolCallsStreamingCC:
             chunk.choices[0].finish_reason = "tool_calls"
             yield chunk
         
-        provider.client.chat.completions.create.return_value = mock_response()
+        # Final response after hitting limit (without tools)
+        async def mock_final_response():
+            chunk = MagicMock()
+            chunk.choices = [MagicMock()]
+            chunk.choices[0].delta.content = "Max tool calls reached."
+            chunk.choices[0].delta.tool_calls = None
+            chunk.choices[0].finish_reason = "stop"
+            yield chunk
+        
+        # Mock responses in sequence
+        provider.client.chat.completions.create.side_effect = [
+            mock_first_response(),
+            mock_final_response()
+        ]
         
         messages = [{"role": "user", "content": "Use tools"}]
         model = "gpt-35-turbo"
         available_tools = [{"type": "function", "name": "test_tool"}]
         agent_id = "test_agent"
         
-        # Act & Assert
-        with pytest.raises(ProviderMaxToolIterationsError):
+        # Act - collect all streaming chunks
+        with patch('app.core.providers.azureopenapi_cc.logger') as mock_logger:
+            chunks = []
             async for content in provider._handle_tool_calls_streaming(messages, model, available_tools, agent_id):
-                pass
+                chunks.append(content)
+        
+        # Assert
+        # Verify tool was executed once (hitting the limit)
+        provider.execute_tool_call.assert_called_once_with("test_tool", {'param': 'value'}, agent_id)
+        
+        # Verify warning was logged
+        mock_logger.warning.assert_called_once()
+        assert "max tool iterations reached" in mock_logger.warning.call_args[0][0].lower()
+        
+        # Verify graceful response was streamed
+        assert "Max tool calls reached." in chunks
+        
+        # Verify two chat calls were made (initial + final without tools)
+        assert provider.client.chat.completions.create.call_count == 2
 
 
 # ============================================================================

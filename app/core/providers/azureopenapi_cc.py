@@ -5,12 +5,13 @@ Integrates with the Azure OpenAI API using the Chat Completions API.
 
 import importlib.metadata
 import json
-from app.core.providers.base import BaseProvider, ProviderMaxToolIterationsError
+from app.core.providers.base import BaseProvider
 from app.models.health import HealthStatus
 from app.models.providers import AzureOpenAIConfig
 from app.models.tools.tools import Tool
 from app.core.tools.tool_registry import TOOL_REGISTRY, ToolRegistry
 from app.core.agents.agent_tool_manager import AgentToolManager
+from app.utils.retry_utils import retry_with_exponential_backoff
 from pydantic import ValidationError
 from app.utils.logging import logger
 from openai import AsyncAzureOpenAI
@@ -43,7 +44,7 @@ class AzureOpenAIProviderCC(BaseProvider):
     async def health_check(self) -> HealthStatus:
         """Check the health of the provider."""
         try:
-            await self.client.chat.completions.create(
+            await self._create_chat_completion(
                 model=self.config.default_model,
                 messages=[{"role": "user", "content": "Hello, how are you?"}],
                 max_tokens=1
@@ -180,7 +181,9 @@ class AzureOpenAIProviderCC(BaseProvider):
                     **(model_settings if model_settings else {})
                 }
 
-                response = await self.client.chat.completions.create(**request_params)
+                response = await self._create_chat_completion(**request_params)
+                await self.record_successful_call()
+
             except Exception as e:
                 logger.error(f"AzureOpenAIProviderCC - _handle_tool_calls_streaming - API call failed: {e}")
                 yield f"Error: Failed to communicate with Azure OpenAI - {str(e)}"
@@ -210,8 +213,24 @@ class AzureOpenAIProviderCC(BaseProvider):
             total_tool_iterations += tool_count
 
         if total_tool_iterations >= self.max_tool_iterations:
-            logger.error(f"AzureOpenAIProviderCC - _handle_tool_calls_streaming - max tool iterations reached: {total_tool_iterations}")
-            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+            logger.warning(f"AzureOpenAIProviderCC - _handle_tool_calls_streaming - max tool iterations reached: {total_tool_iterations}")
+            messages.append({
+                            "role": "system",
+                            "content": """Max tool iterations reached, stopping further processing.
+                                        If appropriate please respond to the user with the information
+                                        you have gathered so far."""
+                        })
+            
+            response = await self._create_chat_completion(
+                model=model,
+                messages=messages,
+                **(model_settings if model_settings else {}),
+                stream=True
+            )
+
+            async for chunk_type, content, parsed_tool_calls in self._parse_streaming_tool_calls(response):
+                if chunk_type == "content":
+                    yield content
 
     async def send_chat(self, context: list, model: str, instructions: str, tools: list[Tool] = None, agent_id: str = None, model_settings: Optional[dict] = None) -> str:
         """Send input to the provider and return the response."""
@@ -227,7 +246,7 @@ class AzureOpenAIProviderCC(BaseProvider):
             **(model_settings if model_settings else {})
         }
 
-        response = await self.client.chat.completions.create(**request_params)
+        response = await self._create_chat_completion(**request_params)
         await self.record_successful_call()
 
         total_tool_iterations = 0
@@ -250,15 +269,25 @@ class AzureOpenAIProviderCC(BaseProvider):
                     logger.debug(f"AzureOpenAIProviderCC - send_chat - tool result: {tool_result}")
                     
                 request_params["messages"] = messages
-                response = await self.client.chat.completions.create(**request_params)
+                response = await self._create_chat_completion(**request_params)
 
                 await self.record_successful_call()
 
             else:
                 break
         if total_tool_iterations >= self.max_tool_iterations:
-            logger.error(f"""AzureOpenAIProviderCC - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
-            raise ProviderMaxToolIterationsError(f"Max tool iterations reached: {total_tool_iterations}", self.config.name)
+            logger.warning(f"""AzureOpenAIProviderCC - send_chat - max tool iterations reached: {total_tool_iterations} - check tools and system prompt""")
+            request_params["messages"].append({
+                "role": "system",
+                "content": """Max tool calls reached."""
+            })
+
+            response = await self._create_chat_completion(
+                model=model,
+                messages=request_params["messages"],
+                **(model_settings if model_settings else {})
+            )
+
         
         logger.debug(f"""AzureOpenAIProviderCC - send_chat - completed Total Requests: {self.total_requests}""")
         return response.choices[0].message.content
@@ -278,7 +307,7 @@ class AzureOpenAIProviderCC(BaseProvider):
 
     async def embed(self, text: str, model: str) -> list[float]:
         """Embed text using the provider."""
-        response = await self.client.embeddings.create(
+        response = await self._create_embedding(
             model=model,
             input=text
         )
@@ -297,3 +326,13 @@ class AzureOpenAIProviderCC(BaseProvider):
     
     async def rerank(self, model: str, query: str, candidates: List[str]) -> List[float]:
         return await super().rerank(model, query, candidates)
+
+    @retry_with_exponential_backoff(max_retries=5, initial_delay=60.0)
+    async def _create_chat_completion(self, **kwargs):
+        """Helper method to wrap API calls with retry logic."""
+        return await self.client.chat.completions.create(**kwargs)
+    
+    @retry_with_exponential_backoff(max_retries=3, initial_delay=60.0)
+    async def _create_embedding(self, **kwargs):
+        """Helper method for embeddings with retry logic."""
+        return await self.client.embeddings.create(**kwargs)

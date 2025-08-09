@@ -34,7 +34,10 @@ The evaluation framework consists of several key components:
 - **`evals/`** - Agent-specific evaluation configurations
   - Contains evaluation setups for different agents
   - Each file defines its own metrics and test contexts
-  - Example: `cli_agent.py` for CLI agent evaluation
+  - Examples:
+    - `cli_agent.py` - Comprehensive CLI agent evaluation
+    - `simple_eval.py` - Basic evaluation with tool correctness and contextual relevancy
+    - `temporal_awareness.py` - Time-based information and current event evaluation
 
 ## Creating Agent Evaluations
 
@@ -128,23 +131,70 @@ GEval(
 )
 ```
 
+## Available Evaluation Scripts
+
+### CLI Agent Evaluation (`cli_agent.py`)
+Comprehensive evaluation of the CLI agent with tool correctness, hallucination detection, and coherence metrics.
+
+```bash
+# Generate golden test cases
+python app/evaluation/evals/cli_agent.py --generate
+
+# Run evaluation
+python app/evaluation/evals/cli_agent.py --verbose
+```
+
+### Simple Evaluation (`simple_eval.py`)
+Basic evaluation focusing on tool correctness and contextual relevancy for straightforward queries.
+
+```bash
+# Generate test cases
+python app/evaluation/evals/simple_eval.py --generate
+
+# Run evaluation with detailed output
+python app/evaluation/evals/simple_eval.py --verbose
+```
+
+**Key Features:**
+- Tool correctness validation
+- Contextual relevancy scoring (threshold: 0.7)
+- Tests current information retrieval (e.g., "who won the premier league in 2025")
+- Uses Ollama models for evaluation
+
+### Temporal Awareness Evaluation (`temporal_awareness.py`)
+Evaluates agent's ability to handle time-based queries and current event information.
+
+```bash
+# Generate temporal test cases
+python app/evaluation/evals/temporal_awareness.py --generate
+
+# Run temporal awareness evaluation
+python app/evaluation/evals/temporal_awareness.py --verbose
+```
+
+**Key Features:**
+- Tests understanding of temporal context
+- Validates current date/time awareness
+- Evaluates recent event knowledge
+- Ensures accurate time-based information retrieval
+
 ## Running Evaluations
 
 ### Basic Usage
 
 1. **Generate golden test cases** (first time only):
    ```bash
-   python app/evaluation/evals/cli_agent.py --generate
+   python app/evaluation/evals/<evaluation_script>.py --generate
    ```
 
 2. **Run evaluation** using existing golden dataset:
    ```bash
-   python app/evaluation/evals/cli_agent.py
+   python app/evaluation/evals/<evaluation_script>.py
    ```
 
 3. **Run with verbose output** for detailed results:
    ```bash
-   python app/evaluation/evals/cli_agent.py --verbose
+   python app/evaluation/evals/<evaluation_script>.py --verbose
    ```
 
 ### Evaluation Workflow

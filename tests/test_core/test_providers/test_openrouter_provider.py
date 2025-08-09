@@ -8,7 +8,8 @@ import pytest
 
 from app.core.providers.openrouter import OpenRouterProvider
 from app.models.providers import OpenRouterConfig
-from app.core.providers.base import ProviderMaxToolIterationsError, ProviderConnectionError
+from app.core.providers.base import ProviderConnectionError
+# Note: ProviderMaxToolIterationsError import removed - OpenRouter now handles max iterations gracefully
 
 
 @pytest.fixture
@@ -179,22 +180,41 @@ async def test_send_chat_executes_tool_calls_and_returns_final(provider, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_send_chat_max_tool_iterations_raises(provider, monkeypatch):
+async def test_send_chat_max_tool_iterations_graceful_handling(provider, monkeypatch):
     # Every response keeps asking for a tool to force iteration
     tc = _make_tool_call("call-1", "noop", "{}")
     looping = _make_chat_completion_message(content=None, tool_calls=[tc])
+    
+    # Final graceful response after hitting limit
+    final_response = _make_chat_completion_message(
+        content="Max tool calls reached. Here's what I have so far.", 
+        tool_calls=[]
+    )
 
     mocked_client = MagicMock()
-    # Enough responses to exceed default max_tool_iterations (10) -> we set small for speed
-    mocked_client.chat.completions.create = AsyncMock(side_effect=[looping] * 5)
+    # First responses trigger limit, final response is graceful handling
+    mocked_client.chat.completions.create = AsyncMock(side_effect=[looping, looping, final_response, final_response])
 
     with patch("app.core.providers.openrouter.AsyncOpenAI", return_value=mocked_client):
         await provider.initialize()
 
-    provider.max_tool_iterations = 2
-    with patch.object(provider, "execute_tool_call", new=AsyncMock(return_value="ok")):
-        with pytest.raises(ProviderMaxToolIterationsError):
-            await provider.send_chat([{"role": "user", "content": "loop"}], provider.config.default_model, "sys")
+    provider.max_tool_iterations = 1
+    with patch.object(provider, "execute_tool_call", new=AsyncMock(return_value="ok")) as mock_execute:
+        with patch('app.core.providers.openrouter.logger') as mock_logger:
+            result = await provider.send_chat([{"role": "user", "content": "loop"}], provider.config.default_model, "sys")
+    
+    # Verify tool was executed once (hitting the limit)
+    assert mock_execute.call_count == 1
+    
+    # Verify warning was logged
+    mock_logger.warning.assert_called_once()
+    assert "max tool iterations reached" in mock_logger.warning.call_args[0][0].lower()
+    
+    # Verify graceful response was returned
+    assert result == "Max tool calls reached. Here's what I have so far."
+    
+    # Verify multiple chat calls were made (up to 4 due to implementation details)
+    assert mocked_client.chat.completions.create.call_count >= 2
 
 
 @pytest.mark.asyncio

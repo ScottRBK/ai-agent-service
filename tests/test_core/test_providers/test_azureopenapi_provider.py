@@ -16,7 +16,7 @@ import sys
 from app.core.providers.azureopenapi import AzureOpenAIProvider
 from app.models.providers import AzureOpenAIConfig
 from app.models.health import HealthStatus
-from app.core.providers.base import ProviderMaxToolIterationsError
+# Note: ProviderMaxToolIterationsError import removed - AzureOpenAI Response API now handles max iterations gracefully
 from app.models.tools.tools import Tool
 
 @pytest.fixture
@@ -527,7 +527,8 @@ class TestErrorHandling:
         mock_provider.client = mock_azure_client
         mock_provider.max_tool_iterations = 1  # Set to 1 to trigger the limit quickly
         
-        async def mock_stream_with_tools():
+        # First response with tool calls to trigger max iterations
+        async def mock_first_stream():
             yield Mock(type="response.output_text.delta", delta="Processing")
             yield Mock(type="response.completed", response=Mock(
                 output=[
@@ -535,7 +536,12 @@ class TestErrorHandling:
                 ]
             ))
         
-        mock_azure_client.responses.create.return_value = mock_stream_with_tools()
+        # Final response after hitting max iterations
+        async def mock_final_stream():
+            yield Mock(type="response.output_text.delta", delta="Max tool iterations reached, stopping further processing.")
+            yield Mock(type="response.completed", response=Mock(output=[]))
+        
+        mock_azure_client.responses.create.side_effect = [mock_first_stream(), mock_final_stream()]
         mock_provider.execute_tool_call = AsyncMock(return_value="result")
         
         context = [{"role": "user", "content": "Use tools repeatedly"}]
@@ -547,8 +553,9 @@ class TestErrorHandling:
         async for response in mock_provider.send_chat_with_streaming(context, model, instructions):
             responses.append(response)
         
-        # Assert
-        assert any("Warning: Maximum tool iterations" in response for response in responses)
+        # Assert - check for graceful max iterations handling
+        # The provider should stream the final graceful response
+        assert any("Max tool iterations reached" in response for response in responses)
 
 # ============================================================================
 # 5. Configuration & Cleanup Tests
@@ -1232,22 +1239,28 @@ class TestHandleToolCallsStreaming:
         available_tools = [{"type": "function", "name": "test_tool"}]
         agent_id = "test_agent"
         
-        # Always return tool calls to trigger max iterations
-        async def mock_response_with_tools():
+        # First response with tool calls to trigger max iterations
+        async def mock_first_response():
             yield Mock(type="response.output_text.delta", delta="Processing")
             yield Mock(type="response.completed", response=Mock(output=[
                 Mock(type="function_call", name="test_tool", arguments='{"param": "value"}', call_id="call_123")
             ]))
         
-        mock_azure_client.responses.create.return_value = mock_response_with_tools()
+        # Final response after hitting max iterations
+        async def mock_final_response():
+            yield Mock(type="response.output_text.delta", delta="Max tool iterations reached, stopping further processing.")
+            yield Mock(type="response.completed", response=Mock(output=[]))
+        
+        mock_azure_client.responses.create.side_effect = [mock_first_response(), mock_final_response()]
         
         # Act
         results = []
         async for content in mock_provider._handle_tool_calls_streaming(context, model, available_tools, agent_id):
             results.append(content)
         
-        # Assert
-        assert any("Warning: Maximum tool iterations" in result for result in results)
+        # Assert - check for graceful max iterations handling
+        # The provider should stream the final graceful response  
+        assert any("Max tool iterations reached" in result for result in results)
 
     @pytest.mark.asyncio
     async def test_handle_tool_calls_streaming_with_instructions(self, mock_provider, mock_azure_client):

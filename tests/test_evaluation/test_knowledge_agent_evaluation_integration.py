@@ -373,9 +373,11 @@ class TestKnowledgeAgentEvaluationIntegration:
         
         with patch('app.evaluation.dataset.Synthesizer', return_value=mock_synthesizer), \
              patch('builtins.print'), \
-             patch.object(runner, '_get_golden_path'), \
+             patch.object(runner, '_get_golden_path') as mock_path, \
              patch('pathlib.Path.mkdir'), \
              patch('pickle.dump'):
+            
+            mock_path.return_value = "/tmp/mixed_test.pkl"
             
             await runner.generate_goldens()
             

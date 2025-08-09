@@ -6,6 +6,7 @@ import os
 from typing import Optional
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.utils.logging import logger
+from datetime import datetime 
 
 
 class PromptManager:
@@ -77,9 +78,11 @@ class PromptManager:
         # Combine all information
         full_prompt = base_prompt
         if tool_info:
-            full_prompt += tool_info
+            full_prompt += f"\n\n{tool_info}"
         if resource_info:
-            full_prompt += resource_info
+            full_prompt += f"\n\n{resource_info}"
+
+        full_prompt += f"\n\nThe Current Date is: {datetime.now().strftime('%Y-%m-%d')}"
         
         return full_prompt
     

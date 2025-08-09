@@ -192,7 +192,6 @@ class TestSynthesizerConfig:
         errors = exc_info.value.errors()
         error_fields = [error['loc'][0] for error in errors]
         assert 'model' in error_fields
-        assert 'styling_config' in error_fields
 
     def test_synthesizer_config_arbitrary_types(self):
         """Test SynthesizerConfig allows arbitrary types for model"""

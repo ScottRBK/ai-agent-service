@@ -11,7 +11,7 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 * **Health Check Endpoints** - Built-in monitoring and status endpoints
 
 ### 🔌 **AI Integration & Providers**
-* **Multi-Provider AI Support** - Azure OpenAI, Ollama with unified interface
+* **Multi-Provider AI Support** - Azure OpenAI, Ollama, OpenRouter with unified interface
 * **MCP Integration** - Model Context Protocol for external tools using fastmcp library
 * **OpenAI-Compatible API** - Full OpenAI protocol compliance with streaming support
 * **Streaming Support** - Real-time response streaming across all providers and API endpoints
@@ -46,6 +46,7 @@ A modern, intelligent AI Agent Service framework built with FastAPI & FastMCP th
 * **Structured Logging** - Comprehensive logging setup for debugging and monitoring
 * **Type Safety** - Full type hints throughout the codebase
 * **Auto-Generated Docs** - Interactive API documentation with Swagger UI and ReDoc
+* **Rate Limit Resilience** - Automatic retry with exponential backoff for API rate limits
 
 ## 🚀 Quick Start
 
@@ -105,9 +106,10 @@ ai-agent-service/
 │   │   │   └── memory_compression_agent.py # Memory compression agent (inherits from BaseAgent)
 │   │   ├── providers/
 │   │   │   ├── base.py                  # Base provider interface
-│   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API) with streaming
-│   │   │   ├── azureopenapi_cc.py       # Azure OpenAI (Chat Completions) with streaming
-│   │   │   └── ollama.py                # Ollama provider with streaming
+│   │   │   ├── azureopenapi.py          # Azure OpenAI (Responses API) with streaming and retry logic
+│   │   │   ├── azureopenapi_cc.py       # Azure OpenAI (Chat Completions) with streaming and retry logic
+│   │   │   ├── ollama.py                # Ollama provider with streaming
+│   │   │   └── openrouter.py            # OpenRouter provider with OpenAI-compatible API and retry logic
 │   │   ├── resources/
 │   │   │   ├── base.py                  # Base resource interface
 │   │   │   ├── memory.py                # PostgreSQL memory resource
@@ -134,7 +136,8 @@ ai-agent-service/
 │   │       └── knowledge_base.py        # Knowledge base data models
 │   └── utils/
 │       ├── logging.py                   # Logging configuration
-│       └── chat_utils.py                # Response cleaning utilities
+│       ├── chat_utils.py                # Response cleaning utilities
+│       └── retry_utils.py               # Rate limit retry with exponential backoff
 ├── tests/
 │   ├── test_core/
 │   │   ├── test_agents/                 # Agent unit tests
@@ -152,7 +155,9 @@ ai-agent-service/
 │   │   ├── dataset.py                   # Golden dataset management
 │   │   ├── evaluation_utils.py          # Result analysis utilities
 │   │   └── evals/                       # Agent-specific evaluations
-│   │       └── cli_agent.py             # CLI agent evaluation example
+│   │       ├── cli_agent.py             # CLI agent evaluation example
+│   │       ├── simple_eval.py           # Basic evaluation with tool correctness
+│   │       └── temporal_awareness.py    # Time-based information evaluation
 ├── examples/
 │   └── run_agent.py                     # CLI agent runner
 ├── docker/
@@ -183,6 +188,7 @@ The service includes a comprehensive memory system providing:
 - **AI-powered compression** - Intelligent summarization when conversations exceed token thresholds  
 - **Cross-session context** - Automatic retrieval of relevant context from past conversations
 - **Knowledge base archival** - Compressed conversations archived for enhanced context awareness
+- **Graceful error handling** - Tool iteration limits handled without exceptions
 
 For detailed memory configuration, compression settings, and usage examples, see [Memory Documentation](docs/memory.md).
 
@@ -219,13 +225,14 @@ For comprehensive deployment instructions, environment configuration, and produc
 
 The service provides a comprehensive agent framework with:
 
-- **Multi-Provider Support**: Azure OpenAI, Ollama with unified interface  
+- **Multi-Provider Support**: Azure OpenAI, Ollama, OpenRouter with unified interface  
 - **Agent-Specific Tool Filtering**: Granular control over tool access per agent
 - **MCP Integration**: HTTP and command-based Model Context Protocol servers
 - **Memory Management**: PostgreSQL-based conversation persistence with compression
 - **Knowledge Base System**: Vector-based RAG with document ingestion, semantic search, and reranking
 - **Direct Resource Composition**: Simplified architecture with agents managing their own resources
 - **Dynamic Configuration**: Runtime model and parameter overrides
+- **Rate Limit Resilience**: Automatic retry logic with exponential backoff
 
 For detailed agent configuration, MCP server setup, and provider information, see [Usage Examples](docs/examples.md).
 
@@ -302,6 +309,7 @@ The service uses a modular architecture with clean separation of concerns:
 - **Tool System**: Plugin-based MCP and function tools
 - **Vector Storage**: Extensible vector provider architecture with PostgreSQL integration
 - **Hot Reload**: Development mode with automatic code reloading
+- **Retry Patterns**: Built-in exponential backoff for rate limit handling
 
 For detailed development patterns, custom agent creation, and code examples, see [Usage Examples](docs/examples.md).
 
@@ -312,6 +320,7 @@ For detailed development patterns, custom agent creation, and code examples, see
 - **PostgreSQL** - Conversation memory persistence, vector storage, and knowledge base management
 - **PGVector** - PostgreSQL extension for high-performance vector operations
 - **DeepEval** - AI agent evaluation and performance assessment
+- **OpenRouter** - Access to diverse AI models through unified API
 
 ## 🤝 Contributing
 

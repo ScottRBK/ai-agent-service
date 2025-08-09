@@ -17,7 +17,7 @@ class ContextWithMetadata(BaseModel):
 class SynthesizerConfig(BaseModel):
     """Configuration for the DeepEval synthesizer"""
     model: Any  # DeepEval model instance
-    styling_config: StylingConfig
+    styling_config: Optional[StylingConfig] = None
     max_goldens_per_context: int = 2
     
     class Config:

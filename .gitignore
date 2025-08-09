@@ -165,3 +165,5 @@ temp/
 
 # Docker
 .dockerignore 
+package.json
+package-lock.json

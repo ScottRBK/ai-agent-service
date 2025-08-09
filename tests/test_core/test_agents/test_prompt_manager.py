@@ -138,7 +138,11 @@ class TestPromptManager:
             prompt_manager = PromptManager("test_agent")
             system_prompt = prompt_manager.get_system_prompt_with_tools([])
             
-            assert system_prompt == "You are a test assistant."
+            # Check base prompt is included
+            assert "You are a test assistant." in system_prompt
+            # Check date is included
+            assert "The Current Date is:" in system_prompt
+            # No tools should be listed
             assert "Available tools:" not in system_prompt
     
     def test_get_system_prompt_with_tools_none(self):
@@ -159,7 +163,9 @@ class TestPromptManager:
             prompt_manager = PromptManager("test_agent")
             system_prompt = prompt_manager.get_system_prompt_with_tools(None)
             
-            assert system_prompt == "You are a test assistant."
+            # Check base prompt and date are included
+            assert "You are a test assistant." in system_prompt
+            assert "The Current Date is:" in system_prompt
     
     def test_load_prompt_from_file_not_found(self):
         """Test loading prompt from non-existent file."""
@@ -372,7 +378,11 @@ class TestPromptManager:
             prompt_manager = PromptManager("test_agent")
             system_prompt = prompt_manager.get_system_prompt_with_tools([])
             
-            assert system_prompt == "You are a test assistant."
+            # Check base prompt is included
+            assert "You are a test assistant." in system_prompt
+            # Check date is included
+            assert "The Current Date is:" in system_prompt
+            # No tools should be listed
             assert "Available tools:" not in system_prompt
     
     def test_get_system_prompt_with_tools_malformed_dict(self):
@@ -399,5 +409,9 @@ class TestPromptManager:
             
             # Should handle malformed input gracefully and return base prompt
             system_prompt = prompt_manager.get_system_prompt_with_tools(malformed_tools)
-            assert system_prompt == "You are a test assistant."
+            # Check base prompt is included
+            assert "You are a test assistant." in system_prompt
+            # Check date is included
+            assert "The Current Date is:" in system_prompt
+            # No tools should be listed since the input was malformed
             assert "Available tools:" not in system_prompt 

@@ -12,7 +12,7 @@ from app.models.providers import OllamaConfig
 from app.core.tools.function_calls.date_tool import DateTool
 from datetime import datetime
 from ollama import ChatResponse, Message
-from app.core.providers.base import ProviderMaxToolIterationsError
+# Note: ProviderMaxToolIterationsError import removed - Ollama now handles max iterations gracefully
 
 @pytest.fixture
 def mock_config():
@@ -252,26 +252,55 @@ class TestSendChat:
     
     @pytest.mark.asyncio
     async def test_send_chat_max_tool_iterations_exceeded(self, provider, mock_client):
-        """Test send_chat max tool iterations error."""
+        """Test send_chat max tool iterations graceful handling."""
         provider.client = mock_client
         provider.max_tool_iterations = 1
         
         tool_call = create_mock_tool_call("infinite_tool", '{"loop": true}')
         
-        # Always return tool calls to trigger infinite loop
-        mock_response = MagicMock()
-        mock_response.message.content = ""
-        mock_response.message.tool_calls = [tool_call]
-        mock_client.chat = AsyncMock(return_value=mock_response)
+        # First response with tool calls to trigger the limit
+        first_response = MagicMock()
+        first_response.message.content = ""
+        first_response.message.tool_calls = [tool_call]
         
-        with patch.object(provider, 'execute_tool_call', return_value='loop_result'):
-            with pytest.raises(ProviderMaxToolIterationsError):
-                await provider.send_chat(
+        # Second response after tool execution (no more tool calls)
+        second_response = MagicMock()
+        second_response.message.content = "Processing..."
+        second_response.message.tool_calls = []  # No more tool calls
+        
+        # Final response after hitting limit (without tools)
+        final_response = MagicMock()
+        final_response.message.content = "Max tool calls reached. Here's what I found so far."
+        final_response.message.tool_calls = []
+        
+        mock_client.chat = AsyncMock(side_effect=[first_response, second_response, final_response])
+        
+        with patch.object(provider, 'execute_tool_call', return_value='loop_result') as mock_execute:
+            with patch('app.core.providers.ollama.logger') as mock_logger:
+                result = await provider.send_chat(
                     context=[{"role": "user", "content": "Loop"}],
                     model="test-model",
                     instructions=None,
                     agent_id="test_agent"
                 )
+        
+        # Verify tool was executed once (hitting the limit)
+        mock_execute.assert_called_once_with("infinite_tool", '{"loop": true}', "test_agent")
+        
+        # Verify warning was logged
+        mock_logger.warning.assert_called_once()
+        assert "max tool iterations reached" in mock_logger.warning.call_args[0][0].lower()
+        
+        # Verify graceful response was returned
+        assert result == "Max tool calls reached. Here's what I found so far."
+        
+        # Verify three chat calls were made (initial + after tool execution + final without tools)
+        assert mock_client.chat.call_count == 3
+        
+        # Verify final call was made without tools
+        final_call_args = mock_client.chat.call_args[1]
+        # Final call should have tools removed or be None
+        assert final_call_args.get("tools") is None or final_call_args.get("tools") == []
     
     @pytest.mark.asyncio
     async def test_send_chat_multiple_tool_calls_single_response(self, provider, mock_client):
@@ -371,30 +400,43 @@ async def test_send_chat_with_streaming_max_iterations_exceeded(provider, mock_c
     mock_tool_call.function.name = "test_tool"
     mock_tool_call.function.arguments = '{"arg": "value"}'
     
-    # Create a proper async generator
-    class MockAsyncGenerator:
-        def __aiter__(self):
-            return self
-        
-        async def __anext__(self):
-            if not hasattr(self, '_yielded'):
-                self._yielded = True
-                return MagicMock(message=MagicMock(content="", tool_calls=[mock_tool_call]))
-            else:
-                raise StopAsyncIteration
+    # First response with tool calls (triggers limit)
+    first_chunks = [{'content': '', 'tool_calls': [mock_tool_call]}]
     
-    mock_response = MockAsyncGenerator()
-    mock_client.chat.return_value = mock_response
+    # Final response after hitting limit (without tools)
+    final_chunks = [{'content': 'Max tool iterations reached, stopping further processing. Here is what I have so far.'}]
     
-    with patch.object(provider, 'execute_tool_call', return_value="tool_result"):
-        # Act & Assert
-        with pytest.raises(ProviderMaxToolIterationsError):
-            async for _ in provider.send_chat_with_streaming(
+    # Mock responses
+    responses = [
+        create_streaming_response(first_chunks),
+        create_streaming_response(final_chunks)
+    ]
+    mock_client.chat.side_effect = responses
+    
+    with patch.object(provider, 'execute_tool_call', return_value="tool_result") as mock_execute:
+        with patch('app.core.providers.ollama.logger') as mock_logger:
+            # Act - collect all streaming chunks
+            chunks = []
+            async for chunk in provider.send_chat_with_streaming(
                 context=[{"role": "user", "content": "Loop"}],
                 model="test-model",
                 instructions="Be helpful"
             ):
-                pass
+                chunks.append(chunk)
+    
+    # Assert
+    # Verify tool was executed once (hitting the limit)
+    mock_execute.assert_called_once_with("test_tool", '{"arg": "value"}', None)
+    
+    # Verify warning was logged
+    mock_logger.warning.assert_called_once()
+    assert "max tool iterations reached" in mock_logger.warning.call_args[0][0].lower()
+    
+    # Verify graceful response was streamed
+    assert chunks == ['Max tool iterations reached, stopping further processing. Here is what I have so far.']
+    
+    # Verify two chat calls were made (initial + final without tools)
+    assert mock_client.chat.call_count == 2
 
 @pytest.mark.asyncio
 async def test_send_chat_with_streaming_model_settings(provider, mock_client):
@@ -1008,26 +1050,49 @@ class TestHandleToolCallsStreaming:
     
     @pytest.mark.asyncio
     async def test_handle_tool_calls_streaming_max_iterations_exceeded(self, provider, mock_client):
-        """Test max iterations exceeded error."""
+        """Test max iterations exceeded graceful handling."""
         provider.client = mock_client
         provider.max_tool_iterations = 1  # Set low limit
         
         tool_call = create_mock_tool_call("infinite_tool", '{"loop": true}')
         
-        # Always return tool calls to trigger infinite loop
-        chunks = [{'content': '', 'tool_calls': [tool_call]}]
-        mock_client.chat.return_value = create_streaming_response(chunks)
+        # First response with tool calls (triggers limit)
+        first_chunks = [{'content': '', 'tool_calls': [tool_call]}]
         
-        with patch.object(provider, 'execute_tool_call', return_value='loop_result'):
-            messages = []
-            available_tools = [{'name': 'infinite_tool'}]
-            
-            # Should raise max iterations error
-            with pytest.raises(ProviderMaxToolIterationsError):
-                async for _ in provider._handle_tool_calls_streaming(
+        # Final response after hitting limit (without tools)
+        final_chunks = [{'content': 'Max tool iterations reached, stopping further processing. Here is what I have so far.'}]
+        
+        # Mock responses
+        responses = [
+            create_streaming_response(first_chunks),
+            create_streaming_response(final_chunks)
+        ]
+        mock_client.chat.side_effect = responses
+        
+        with patch.object(provider, 'execute_tool_call', return_value='loop_result') as mock_execute:
+            with patch('app.core.providers.ollama.logger') as mock_logger:
+                messages = []
+                available_tools = [{'name': 'infinite_tool'}]
+                
+                # Collect all streaming content
+                chunks = []
+                async for chunk in provider._handle_tool_calls_streaming(
                     messages, "test-model", available_tools, "test_agent"
                 ):
-                    pass
+                    chunks.append(chunk)
+        
+        # Verify tool was executed once (hitting the limit)
+        mock_execute.assert_called_once_with("infinite_tool", '{"loop": true}', "test_agent")
+        
+        # Verify warning was logged
+        mock_logger.warning.assert_called_once()
+        assert "max tool iterations reached" in mock_logger.warning.call_args[0][0].lower()
+        
+        # Verify graceful response was streamed
+        assert chunks == ['Max tool iterations reached, stopping further processing. Here is what I have so far.']
+        
+        # Verify two chat calls were made (initial + final without tools)
+        assert mock_client.chat.call_count == 2
     
     @pytest.mark.asyncio
     async def test_handle_tool_calls_streaming_no_tool_calls(self, provider, mock_client):
@@ -1561,21 +1626,35 @@ class TestCodeCoverage:
         # Create responses that would cause exactly max_tool_iterations
         tool_call = create_mock_tool_call("limit_tool", '{"limit": true}')
         
-        # Two responses: first has tool calls, second would exceed limit
+        # First response: has tool calls (triggers limit)
+        # Final response: graceful handling without tools
         responses = [
             create_streaming_response([{'content': 'iter_0', 'tool_calls': [tool_call]}]),
-            create_streaming_response([{'content': 'iter_1', 'tool_calls': [tool_call]}])
+            create_streaming_response([{'content': 'Max tool iterations reached, stopping further processing. Here is what I have so far.'}])
         ]
         
         mock_client.chat.side_effect = responses
         
-        with patch.object(provider, 'execute_tool_call', return_value='limit_result'):
-            with pytest.raises(ProviderMaxToolIterationsError):
+        with patch.object(provider, 'execute_tool_call', return_value='limit_result') as mock_execute:
+            with patch('app.core.providers.ollama.logger') as mock_logger:
                 chunks = []
                 async for chunk in provider._handle_tool_calls_streaming(
                     [], "limit-model", [], "limit_agent"
                 ):
                     chunks.append(chunk)
+        
+        # Verify tool was executed once (hitting the limit)
+        mock_execute.assert_called_once_with("limit_tool", '{"limit": true}', "limit_agent")
+        
+        # Verify warning was logged
+        mock_logger.warning.assert_called_once()
+        assert "max tool iterations reached" in mock_logger.warning.call_args[0][0].lower()
+        
+        # Verify graceful response was streamed
+        assert chunks == ['iter_0', 'Max tool iterations reached, stopping further processing. Here is what I have so far.']
+        
+        # Verify two chat calls were made (initial + final without tools)
+        assert mock_client.chat.call_count == 2
     
     @pytest.mark.asyncio
     async def test_model_settings_none_vs_empty_dict_coverage(self, provider, mock_client):

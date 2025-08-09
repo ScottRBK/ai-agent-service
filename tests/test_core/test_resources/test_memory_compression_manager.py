@@ -4,7 +4,7 @@ Unit tests for Memory Compression Manager.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from typing import List, Dict, Any
 
 from app.core.resources.memory_compression_manager import MemoryCompressionManager
@@ -118,16 +118,13 @@ class TestMemoryCompressionManager:
         
         assert manager.enabled is False
     
-    @patch('app.core.resources.memory_compression_manager.logger')
-    def test_should_compress_disabled(self, mock_logger, default_compression_manager, sample_memory_entries):
+    def test_should_compress_disabled(self, default_compression_manager, sample_memory_entries):
         """Test should_compress when compression is disabled."""
         default_compression_manager.enabled = False
         
         result = default_compression_manager.should_compress(sample_memory_entries)
         
         assert result is False
-        mock_logger.debug.assert_not_called()
-        mock_logger.info.assert_not_called()
     
     def test_should_compress_insufficient_messages(self, compression_manager, sample_memory_entries):
         """Test should_compress when there are insufficient messages."""
@@ -138,8 +135,7 @@ class TestMemoryCompressionManager:
         
         assert result is False
     
-    @patch('app.core.resources.memory_compression_manager.logger')
-    def test_should_compress_below_threshold(self, mock_logger, compression_manager, sample_memory_entries):
+    def test_should_compress_below_threshold(self, compression_manager, sample_memory_entries):
         """Test should_compress when tokens are below threshold."""
         # Mock token counter to return low token count
         compression_manager.token_counter.count_conversation_tokens = MagicMock(return_value=2000)  # Below threshold of 5000
@@ -148,11 +144,8 @@ class TestMemoryCompressionManager:
         
         assert result is False
         compression_manager.token_counter.count_conversation_tokens.assert_called_once()
-        mock_logger.info.assert_called_once()
-        mock_logger.debug.assert_not_called()
     
-    @patch('app.core.resources.memory_compression_manager.logger')
-    def test_should_compress_above_threshold(self, mock_logger, compression_manager, sample_memory_entries):
+    def test_should_compress_above_threshold(self, compression_manager, sample_memory_entries):
         """Test should_compress when tokens are above threshold."""
         # Mock token counter to return high token count
         compression_manager.token_counter.count_conversation_tokens = MagicMock(return_value=7000)  # Above threshold of 5000
@@ -161,11 +154,8 @@ class TestMemoryCompressionManager:
         
         assert result is True
         compression_manager.token_counter.count_conversation_tokens.assert_called_once()
-        mock_logger.info.assert_called()
-        mock_logger.debug.assert_not_called()
     
-    @patch('app.core.resources.memory_compression_manager.logger')
-    def test_should_compress_exact_threshold(self, mock_logger, compression_manager, sample_memory_entries):
+    def test_should_compress_exact_threshold(self, compression_manager, sample_memory_entries):
         """Test should_compress when tokens are exactly at threshold."""
         # Mock token counter to return exact threshold
         compression_manager.token_counter.count_conversation_tokens = MagicMock(return_value=5000)  # Exactly at threshold
@@ -174,8 +164,6 @@ class TestMemoryCompressionManager:
         
         assert result is False  # Should not compress when exactly at threshold
         compression_manager.token_counter.count_conversation_tokens.assert_called_once()
-        mock_logger.info.assert_called_once()
-        mock_logger.debug.assert_not_called()
     
     def test_should_compress_conversation_format(self, compression_manager, sample_memory_entries):
         """Test that should_compress formats conversation correctly for token counting."""

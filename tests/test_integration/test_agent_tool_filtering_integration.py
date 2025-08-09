@@ -3,7 +3,6 @@ import pytest
 import logging
 from unittest.mock import patch
 from app.core.providers.manager import ProviderManager
-from app.core.providers.base import ProviderMaxToolIterationsError
 from app.models.health import HealthStatus
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.core.agents.prompt_manager import PromptManager
@@ -292,7 +291,7 @@ async def test_agent_tool_manager_direct_test(provider_id, caplog):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider_id", ["ollama", "azure_openai_cc", "azure_openai", "openrouter"])
 async def test_provider_tool_integration_bad_tools(provider_id):
-    """Test error handling when tools are requested but not available to the agent."""
+    """Test graceful handling when tools are requested but not available to the agent."""
     manager = ProviderManager()
     provider_info = manager.get_provider(provider_id)
     
@@ -306,7 +305,7 @@ async def test_provider_tool_integration_bad_tools(provider_id):
         pytest.skip(f"{provider_id} not healthy: {health.error_details}")
     
     try:
-        # Test with an agent that only has access to datetime tool
+        # Test with an agent that only has access to datetime and arithmetic tools  
         agent_id = "test_regular_tools_only_agent"
         
         # Use PromptManager instead of hardcoded instructions
@@ -315,23 +314,21 @@ async def test_provider_tool_integration_bad_tools(provider_id):
         available_tools = await agent_tool_manager.get_available_tools()
         system_prompt = prompt_manager.get_system_prompt_with_tools(available_tools)
         
-        try:
-            response = await provider.send_chat(
-                context=[{"role": "user", "content": "What is 6000+12312 please use the add_two_numbers tool and also what is the current date and time in Tokyo?"}],
-                model=config.default_model,
-                instructions=system_prompt,
-                tools=None,  # Let agent manager handle tool selection
-                agent_id=agent_id
-            )
-        except ProviderMaxToolIterationsError:
-            # This is expected behavior - agent doesn't have access to add_two_numbers
-            # so it should reach max iterations trying to use unavailable tools
-            pass
-        else:
-            # If we get here, the agent somehow managed to complete without the required tool
-            # This might indicate the LLM ignored the tool requirement, which is acceptable
-            assert isinstance(response, str)
-            assert len(response) > 0
+        # Request a task that would require many tool iterations to demonstrate graceful handling
+        response = await provider.send_chat(
+            context=[{"role": "user", "content": "What is 6000+12312 please use the add_two_numbers tool and also what is the current date and time in Tokyo?"}],
+            model=config.default_model,
+            instructions=system_prompt,
+            tools=None,  # Let agent manager handle tool selection
+            agent_id=agent_id
+        )
+        
+        # Verify graceful handling - response should be a valid string
+        assert isinstance(response, str)
+        assert len(response) > 0
+        
+        # The agent should provide some response even if it can't use unavailable tools
+        # This demonstrates graceful degradation instead of crashing
         
     finally:
         await provider.cleanup() 

@@ -17,6 +17,10 @@ python examples/run_agent.py mcp_agent azure_openai_cc
 
 # Run agent with Ollama provider
 python examples/run_agent.py cli_agent ollama --model qwen3:4b --setting temperature 0.7
+
+# Run agent with OpenRouter provider
+python examples/run_agent.py cli_agent openrouter --model openrouter/auto
+python examples/run_agent.py research_agent openrouter --model meta-llama/llama-3.1-8b-instruct
 ```
 
 ### CLI Parameter Overrides
@@ -40,6 +44,13 @@ python examples/run_agent.py research_agent ollama \
   --setting num_predict 1000 \
   --setting repeat_penalty 1.1 \
   --setting top_k 40
+
+# Override with OpenRouter parameters (OpenAI-compatible)
+python examples/run_agent.py cli_agent openrouter \
+  --model openai/gpt-4 \
+  --setting temperature 0.7 \
+  --setting max_tokens 2000 \
+  --setting top_p 0.9
 ```
 
 **Parameter Override Priority:**
@@ -119,6 +130,43 @@ await agent.clear_conversation()
 history = await agent.get_conversation_history()
 for entry in history:
     print(f"{entry['role']}: {entry['content']}")
+```
+
+## Rate Limit Handling
+
+The service includes automatic retry logic for handling API rate limits:
+
+### Retry Behavior
+- **Automatic Detection**: 429 errors trigger exponential backoff
+- **Configurable Delays**: Initial 1s delay, max 60s with jitter
+- **Provider Support**: Azure OpenAI and OpenRouter providers
+- **Graceful Degradation**: Tool iteration limits handled without exceptions
+
+### Example with Rate Limiting
+```python
+from app.core.agents.cli_agent import CLIAgent
+
+# Agent will automatically retry on rate limits
+agent = CLIAgent("research_agent", "azure_openai_cc")
+# If rate limited, will retry with exponential backoff
+response = await agent.chat("Complex query requiring multiple API calls")
+```
+
+## Evaluation Examples
+
+### Running New Evaluation Scripts
+```bash
+# Simple evaluation with tool correctness
+python app/evaluation/evals/simple_eval.py --generate  # Generate test cases
+python app/evaluation/evals/simple_eval.py --verbose   # Run evaluation
+
+# Temporal awareness evaluation
+python app/evaluation/evals/temporal_awareness.py --generate
+python app/evaluation/evals/temporal_awareness.py --verbose
+
+# CLI agent comprehensive evaluation
+python app/evaluation/evals/cli_agent.py --generate
+python app/evaluation/evals/cli_agent.py --verbose
 ```
 
 ## Agent Configuration Examples

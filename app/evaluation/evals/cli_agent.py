@@ -5,6 +5,7 @@ from deepeval.models import OllamaModel
 
 from app.evaluation.config import EvaluationConfig, SynthesizerConfig, ContextWithMetadata
 from app.evaluation.runner import EvaluationRunner
+from app.evaluation.custom_ollama import CustomOllamaModel
 from app.config.settings import settings
 
 import asyncio
@@ -15,16 +16,15 @@ def create_evaluation_config() -> EvaluationConfig:
     """Create evaluation configuration for CLI agent"""
     
     # Model for evaluation
-    model = OllamaModel(model="mistral:7b", temperature=0.0)
+    synthesis_model = OllamaModel(model="qwen3:14b", temperature=0.7, base_url=settings.OLLAMA_BASE_URL)
+    evaluation_model = CustomOllamaModel(model="qwen3:30b", temperature=0.0, base_url=settings.OLLAMA_BASE_URL)
     
     # Styling configuration for synthesizer
     styling_config = StylingConfig(
-        scenario="User asking questions that require specific tools",
-        task="Generate queries that clearly indicate which tool to use",
+        scenario="User asking questions that require up to date and relevant information",
+        task="Generate queries that require up to date information, however do neccessarily request tool usage or that they are up to date",
         input_format="""
-        - Search queries: "What's the latest news about X?", "Find information about Y", "Search for Z"
-        - GitHub queries: "Show me repositories about X", "Find GitHub projects for Y", "List repos related to Z"
-        - Deepwiki queries: "What does the wiki say about X?", "Tell me about the Y project on DeepWiki", "Read the DeepWiki page for Z"
+        - Search queries: "Can you tell me about x ? Who are the current champions of y, Who is the CEO of x ?"
         """,
         expected_output_format="A helpful response using information from the appropriate tool"
     )
@@ -32,16 +32,16 @@ def create_evaluation_config() -> EvaluationConfig:
     # Contexts with expected tools
     contexts = [
         ContextWithMetadata(
-            context=["Search results show that OpenAI released GPT-4 in March 2023, with significant improvements in reasoning and reduced hallucinations."],
-            tools=["searxng__searxng_web_search"]
+            context=["Response indicating that the recent premier league winners in were Liverpool FC."],
+            tools=["searxng__searxng_web_search", "searxng__web_url_read"]
         ),
         ContextWithMetadata(
-            context=["GitHub search found 15 repositories related to MCP implementation, with fastmcp being the most popular Python library."],
-            tools=["github__search_repositories"]
+            context=["Response indicating that the of Kraft Heinz is Carlos Abrams-Reivera"],
+            tools=["searxng__searxng_web_search", "searxng__web_url_read"]
         ),
         ContextWithMetadata(
-            context=["The DeepWiki page for ScottRBK/ai-agent-service shows it's a production-ready AI agent framework with MCP (Model Context Protocol) integration."],
-            tools=["deepwiki__read_wiki_contents"]
+            context=["Response indicating that the LIGO-Virgo-Kagra Collaboration has detected the merger of the most massive black holes ever observed in 2023"],
+            tools=["searxng__searxng_web_search", "searxng__web_url_read"]
         )
     ]
     
@@ -52,17 +52,23 @@ def create_evaluation_config() -> EvaluationConfig:
             name="coherence",
             criteria="Is the response coherent and well-structured?",
             evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-            model=model
+            model=evaluation_model
         ),
-        HallucinationMetric(threshold=0.5, model=model),
-        AnswerRelevancyMetric(threshold=0.7, model=model)
+        GEval(
+            name="correctness",
+            criteria="Determine if the output is factually correct based on the expected output",
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+            model=evaluation_model
+        ),
+        HallucinationMetric(threshold=0.5, model=evaluation_model),
+        AnswerRelevancyMetric(threshold=0.7, model=evaluation_model)
     ]
     
     # Create complete configuration
     return EvaluationConfig(
         agent_id="cli_agent",
         synthesizer_config=SynthesizerConfig(
-            model=model,
+            model=synthesis_model,
             styling_config=styling_config,
             max_goldens_per_context=2
         ),

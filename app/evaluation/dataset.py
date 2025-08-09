@@ -40,7 +40,7 @@ class GoldenDataset:
             
             goldens = await synthesizer.a_generate_goldens_from_contexts(
                 contexts=[context],
-                include_expected_output=True,
+                include_expected_output=(expected_output is None),
                 max_goldens_per_context=max_goldens_per_context
             )
             

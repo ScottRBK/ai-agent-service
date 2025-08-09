@@ -42,9 +42,6 @@ class ProviderModelNotFoundError(ProviderError):
     """Raised when requested model is not available."""
     pass
 
-class ProviderMaxToolIterationsError(ProviderError):
-    """Raised when max tool iterations is reached."""
-    pass
 
 class BaseProvider(ABC):
     """Abstract base class for all LLM providers."""
