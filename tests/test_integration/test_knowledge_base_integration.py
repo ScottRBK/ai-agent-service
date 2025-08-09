@@ -62,7 +62,10 @@ class TestKnowledgeBaseIntegration:
             SearchResult(
                 document=Document(
                     id="doc_123",
-                    namespace="conversations:test_user",
+                    user_id="test_user",
+                    namespace_type="conversations",
+                    embedding_model="text-embedding-ada-002",
+                    namespace_qualifier=None,
                     doc_type=DocumentType.CONVERSATION,
                     title="Test Conversation",
                     content="Archived conversation content",
@@ -71,7 +74,10 @@ class TestKnowledgeBaseIntegration:
                 chunk=DocumentChunk(
                     id="chunk_1",
                     document_id="doc_123",
-                    namespace="conversations:test_user",
+                    user_id="test_user",
+                    namespace_type="conversations",
+                    embedding_model="text-embedding-ada-002",
+                    namespace_qualifier=None,
                     content="Important discussion about features",
                     chunk_index=0
                 ),
@@ -116,7 +122,8 @@ class TestKnowledgeBaseIntegration:
             # Verify search works
             search_results = await mock_kb.search(
                 "Important discussion",
-                namespaces=["conversations:test_user"]
+                user_id="test_user",
+                namespace_types=["conversations"]
             )
             
             assert len(search_results) > 0
@@ -132,7 +139,10 @@ class TestKnowledgeBaseIntegration:
             SearchResult(
                 document=Document(
                     id="past_doc",
-                    namespace="conversations:test_user",
+                    user_id="test_user",
+                    namespace_type="conversations",
+                    embedding_model="text-embedding-ada-002",
+                    namespace_qualifier=None,
                     doc_type=DocumentType.CONVERSATION,
                     title="Past Conversation",
                     content="Past conversation about JWT authentication",
@@ -147,7 +157,10 @@ class TestKnowledgeBaseIntegration:
                 chunk=DocumentChunk(
                     id="chunk_1",
                     document_id="past_doc",
-                    namespace="conversations:test_user",
+                    user_id="test_user",
+                    namespace_type="conversations",
+                    embedding_model="text-embedding-ada-002",
+                    namespace_qualifier=None,
                     content="Discussion about JWT tokens with 1-hour expiration using RS256",
                     chunk_index=0
                 ),
@@ -186,7 +199,8 @@ class TestKnowledgeBaseIntegration:
         # Verify the search was called with correct params (no metadata_filters in search)
         mock_kb.search.assert_called_with(
             query=test_message,
-            namespaces=["conversations:test_user"],
+            user_id="test_user",
+            namespace_types=["conversations"],
             limit=10,
             use_reranking=True
         )

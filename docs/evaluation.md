@@ -178,6 +178,24 @@ python app/evaluation/evals/temporal_awareness.py --verbose
 - Evaluates recent event knowledge
 - Ensures accurate time-based information retrieval
 
+### Knowledge Agent Evaluation (`knowledge_agent.py`)
+Evaluates agent's knowledge base integration and RAG capabilities with structured namespace management.
+
+```bash
+# Generate knowledge base test cases
+python app/evaluation/evals/knowledge_agent.py --generate
+
+# Run knowledge agent evaluation
+python app/evaluation/evals/knowledge_agent.py --verbose
+```
+
+**Key Features:**
+- RAG-specific metrics: Contextual Precision, Contextual Recall, Contextual Relevancy, Faithfulness
+- Knowledge base document ingestion and search testing with structured namespaces
+- Multi-user and multi-namespace isolation testing
+- Tool correctness for knowledge base operations
+- Hallucination detection for retrieved information
+
 ## Running Evaluations
 
 ### Basic Usage

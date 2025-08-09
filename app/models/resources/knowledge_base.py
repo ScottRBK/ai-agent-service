@@ -19,10 +19,21 @@ class DocumentType(str, Enum):
     MARKDOWN = "markdown"
 
 
+class NamespaceInfo(BaseModel):
+    """Structured namespace information for type-safe namespace handling."""
+    user_id: str
+    namespace_type: str  # "conversations", "documents", etc.
+    embedding_model: str
+    namespace_qualifier: Optional[str] = None
+
+
 class Document(BaseModel):
-    """Document model with client-generated UUID."""
+    """Document model with structured namespace."""
     id: str                           
-    namespace: str
+    user_id: str
+    namespace_type: str
+    embedding_model: str
+    namespace_qualifier: Optional[str] = None
     doc_type: DocumentType
     source: Optional[str] = None
     title: Optional[str] = None
@@ -31,10 +42,13 @@ class Document(BaseModel):
     created_at: Optional[datetime] = None  
 
 class DocumentChunk(BaseModel):
-    """Document chunk model with client-generated UUID."""
+    """Document chunk model with structured namespace."""
     id: str                           
     document_id: str
-    namespace: str
+    user_id: str
+    namespace_type: str
+    embedding_model: str
+    namespace_qualifier: Optional[str] = None
     chunk_index: int
     content: str
     embedding: Optional[List[float]] = None
@@ -48,8 +62,10 @@ class SearchResult(BaseModel):
 
 
 class SearchFilters(BaseModel):
-    namespaces: Optional[List[str]] = None
+    user_id: Optional[str] = None
+    namespace_types: Optional[List[str]] = None
     doc_types: Optional[List[DocumentType]] = None
+    embedding_model: Optional[str] = None
     metadata_filters: Optional[Dict[str, Any]] = None
     limit: int = 10
 

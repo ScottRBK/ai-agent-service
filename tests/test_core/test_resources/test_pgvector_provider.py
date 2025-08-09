@@ -62,7 +62,10 @@ def sample_document():
     """Sample document for testing"""
     return Document(
         id="test-doc-123",
-        namespace="test:namespace",
+        user_id="test_user",
+        namespace_type="test_namespace",
+        embedding_model="text-embedding-ada-002",
+        namespace_qualifier=None,
         doc_type=DocumentType.TEXT,
         source="test_source.txt",
         title="Test Document",
@@ -77,7 +80,10 @@ def sample_document_chunk():
     return DocumentChunk(
         id="test-chunk-123",
         document_id="test-doc-123",
-        namespace="test:namespace",
+        user_id="test_user",
+        namespace_type="test_namespace",
+        embedding_model="text-embedding-ada-002",
+        namespace_qualifier=None,
         chunk_index=0,
         content="This is a test chunk",
         embedding=[0.1] * 2560,  # 2560 dimensions
@@ -89,8 +95,10 @@ def sample_document_chunk():
 def sample_search_filters():
     """Sample search filters for testing"""
     return SearchFilters(
-        namespaces=["test:namespace"],
+        user_id="test_user",
+        namespace_types=["test_namespace"],
         doc_types=[DocumentType.TEXT],
+        embedding_model="text-embedding-ada-002",
         limit=10
     )
 
@@ -280,7 +288,10 @@ class TestDocumentStorage:
         provider.SessionLocal = MagicMock(return_value=mock_session)
         doc = Document(
             id="test-doc-123",
-            namespace="test:namespace",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             doc_type=DocumentType.TEXT,
             content="Test content",
             metadata=None
@@ -317,7 +328,10 @@ class TestDocumentStorage:
         }
         doc = Document(
             id="test-doc-123",
-            namespace="test:namespace",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             doc_type=DocumentType.JSON,
             content="Test content",
             metadata=complex_metadata
@@ -329,7 +343,7 @@ class TestDocumentStorage:
         mock_session.add.assert_called_once()
         # Verify metadata was JSON serialized
         call_args = mock_session.add.call_args[0][0]
-        assert call_args.doc_metadata == json.dumps(complex_metadata)
+        assert call_args.doc_metadata == complex_metadata
 
 
 # ============================================================================
@@ -364,7 +378,10 @@ class TestChunkStorage:
             chunk = DocumentChunk(
                 id=chunk_id,
                 document_id="test-doc-123",
-                namespace="test:namespace",
+                user_id="test_user",
+                namespace_type="test_namespace",
+                embedding_model="text-embedding-ada-002",
+                namespace_qualifier=None,
                 chunk_index=i,
                 content=f"Chunk {i} content",
                 embedding=[0.1 * (i + 1)] * 2560,
@@ -400,7 +417,10 @@ class TestChunkStorage:
         chunk = DocumentChunk(
             id="chunk-123",
             document_id="test-doc-123",
-            namespace="test:namespace",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             chunk_index=0,
             content="Test content",
             embedding=[0.1] * 2560,
@@ -436,7 +456,10 @@ class TestChunkStorage:
         chunk = DocumentChunk(
             id="chunk-123",
             document_id="test-doc-123",
-            namespace="test:namespace",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             chunk_index=0,
             content="Test content",
             embedding=[0.1] * 2560,  # Exactly 2560 dimensions
@@ -465,12 +488,15 @@ class TestDocumentRetrieval:
         # Mock database row
         mock_row = MagicMock()
         mock_row.id = "test-doc-123"
-        mock_row.namespace = "test:namespace"
+        mock_row.user_id = "test_user"
+        mock_row.namespace_type = "test_namespace"
+        mock_row.embedding_model = "text-embedding-ada-002"
+        mock_row.namespace_qualifier = None
         mock_row.doc_type = "text"
         mock_row.source = "test.txt"
         mock_row.title = "Test Document"
         mock_row.content = "Test content"
-        mock_row.doc_metadata = json.dumps({"test": "metadata"})
+        mock_row.doc_metadata = {"test": "metadata"}
         mock_row.created_at = datetime.now(timezone.utc)
         
         mock_session.query.return_value.filter.return_value.first.return_value = mock_row
@@ -479,7 +505,9 @@ class TestDocumentRetrieval:
         
         assert result is not None
         assert result.id == "test-doc-123"
-        assert result.namespace == "test:namespace"
+        assert result.user_id == "test_user"
+        assert result.namespace_type == "test_namespace"
+        assert result.embedding_model == "text-embedding-ada-002"
         assert result.doc_type == DocumentType.TEXT
         assert result.source == "test.txt"
         assert result.title == "Test Document"
@@ -505,7 +533,10 @@ class TestDocumentRetrieval:
         
         mock_row = MagicMock()
         mock_row.id = "test-doc-123"
-        mock_row.namespace = "test:namespace"
+        mock_row.user_id = "test_user"
+        mock_row.namespace_type = "test_namespace"
+        mock_row.embedding_model = "text-embedding-ada-002"
+        mock_row.namespace_qualifier = None
         mock_row.doc_type = "text"
         mock_row.source = None
         mock_row.title = None
@@ -552,11 +583,14 @@ class TestChunkRetrieval:
             mock_chunk = MagicMock()
             mock_chunk.id = f"chunk-{i}"
             mock_chunk.document_id = "test-doc-123"
-            mock_chunk.namespace = "test:namespace"
+            mock_chunk.user_id = "test_user"
+            mock_chunk.namespace_type = "test_namespace"
+            mock_chunk.embedding_model = "text-embedding-ada-002"
+            mock_chunk.namespace_qualifier = None
             mock_chunk.chunk_index = i
             mock_chunk.content = f"Chunk {i} content"
             mock_chunk.embedding.to_list.return_value = [0.1] * 2560
-            mock_chunk.chunk_metadata = json.dumps({"chunk_number": i})
+            mock_chunk.chunk_metadata = {"chunk_number": i}
             mock_chunk.created_at = datetime.now(timezone.utc)
             mock_chunks.append(mock_chunk)
         
@@ -591,7 +625,10 @@ class TestChunkRetrieval:
         mock_chunk = MagicMock()
         mock_chunk.id = "chunk-123"
         mock_chunk.document_id = "test-doc-123"
-        mock_chunk.namespace = "test:namespace"
+        mock_chunk.user_id = "test_user"
+        mock_chunk.namespace_type = "test_namespace"
+        mock_chunk.embedding_model = "text-embedding-ada-002"
+        mock_chunk.namespace_qualifier = None
         mock_chunk.chunk_index = 0
         mock_chunk.content = "Test content"
         mock_chunk.embedding.to_list.return_value = [0.1] * 2560
@@ -633,26 +670,37 @@ class TestVectorSearch:
         mock_chunk_row = MagicMock()
         mock_chunk_row.id = "chunk-123"
         mock_chunk_row.document_id = "doc-123"
-        mock_chunk_row.namespace = "test:namespace"
+        mock_chunk_row.user_id = "test_user"
+        mock_chunk_row.namespace_type = "test_namespace"
+        mock_chunk_row.embedding_model = "text-embedding-ada-002"
+        mock_chunk_row.namespace_qualifier = None
         mock_chunk_row.chunk_index = 0
         mock_chunk_row.content = "Test chunk content"
         mock_chunk_row.embedding.to_list.return_value = [0.1] * 2560
-        mock_chunk_row.chunk_metadata = json.dumps({"test": "metadata"})
+        mock_chunk_row.chunk_metadata = {"test": "metadata"}
         mock_chunk_row.created_at = datetime.now(timezone.utc)
         
         mock_doc_row = MagicMock()
         mock_doc_row.id = "doc-123"
-        mock_doc_row.namespace = "test:namespace"
+        mock_doc_row.user_id = "test_user"
+        mock_doc_row.namespace_type = "test_namespace"
+        mock_doc_row.embedding_model = "text-embedding-ada-002"
+        mock_doc_row.namespace_qualifier = None
         mock_doc_row.doc_type = "text"
         mock_doc_row.source = "test.txt"
         mock_doc_row.title = "Test Document"
         mock_doc_row.content = "Test document content"
-        mock_doc_row.doc_metadata = json.dumps({"doc": "metadata"})
+        mock_doc_row.doc_metadata = {"doc": "metadata"}
         mock_doc_row.created_at = datetime.now(timezone.utc)
         
-        mock_session.query.return_value.join.return_value.filter.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
-            (mock_chunk_row, mock_doc_row)
-        ]
+        # Use a MagicMock that returns itself for chaining  
+        mock_query = MagicMock()
+        mock_query.join.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = [(mock_chunk_row, mock_doc_row)]
+        mock_session.query.return_value = mock_query
         
         # Mock distance calculation
         mock_session.query.return_value.filter.return_value.scalar.return_value = 0.3
@@ -673,7 +721,9 @@ class TestVectorSearch:
         mock_session.query.return_value.join.return_value.filter.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
         
         filters = SearchFilters(
-            namespaces=["namespace1", "namespace2"],
+            user_id="test_user",
+            namespace_types=["namespace1", "namespace2"],
+            embedding_model="text-embedding-ada-002",
             limit=5
         )
         query_embedding = [0.5] * 2560
@@ -692,6 +742,7 @@ class TestVectorSearch:
         
         filters = SearchFilters(
             doc_types=[DocumentType.TEXT, DocumentType.MARKDOWN],
+            embedding_model="text-embedding-ada-002",
             limit=5
         )
         query_embedding = [0.5] * 2560
@@ -709,7 +760,10 @@ class TestVectorSearch:
         provider.SessionLocal = MagicMock(return_value=mock_session)
         mock_session.query.return_value.join.return_value.order_by.return_value.limit.return_value.all.return_value = []
         
-        filters = SearchFilters(limit=10)
+        filters = SearchFilters(
+            embedding_model="text-embedding-ada-002",
+            limit=10
+        )
         query_embedding = [0.5] * 2560
         
         await provider.search_similar(query_embedding, filters)
@@ -733,15 +787,26 @@ class TestVectorSearch:
     async def test_search_similar_with_limit(self, provider, mock_session):
         """Test search with custom limit"""
         provider.SessionLocal = MagicMock(return_value=mock_session)
-        mock_session.query.return_value.join.return_value.order_by.return_value.limit.return_value.all.return_value = []
         
-        filters = SearchFilters(limit=50)
+        # Use a MagicMock that returns itself for chaining
+        mock_query = MagicMock()
+        mock_query.join.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = []
+        mock_session.query.return_value = mock_query
+        
+        filters = SearchFilters(
+            embedding_model="text-embedding-ada-002",
+            limit=50
+        )
         query_embedding = [0.5] * 2560
         
         await provider.search_similar(query_embedding, filters)
         
         # Verify limit was applied
-        mock_session.query.return_value.join.return_value.order_by.return_value.limit.assert_called_with(50)
+        mock_query.limit.assert_called_with(50)
         mock_session.close.assert_called_once()
     
     @pytest.mark.asyncio
@@ -838,18 +903,21 @@ class TestDocumentListing:
         for i in range(3):
             mock_doc = MagicMock()
             mock_doc.id = f"doc-{i}"
-            mock_doc.namespace = "test:namespace"
+            mock_doc.user_id = "test_user"
+            mock_doc.namespace_type = "test_namespace"
+            mock_doc.embedding_model = "text-embedding-ada-002"
+            mock_doc.namespace_qualifier = None
             mock_doc.doc_type = "text"
             mock_doc.source = f"file{i}.txt"
             mock_doc.title = f"Document {i}"
             mock_doc.content = f"Content {i}"
-            mock_doc.doc_metadata = json.dumps({"index": i})
+            mock_doc.doc_metadata = {"index": i}
             mock_doc.created_at = datetime.now(timezone.utc)
             mock_docs.append(mock_doc)
         
         mock_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = mock_docs
         
-        result = await provider.list_documents("test:namespace")
+        result = await provider.list_documents("test_user", "test_namespace", "text-embedding-ada-002")
         
         assert len(result) == 3
         assert result[0].id == "doc-0"
@@ -863,7 +931,7 @@ class TestDocumentListing:
         provider.SessionLocal = MagicMock(return_value=mock_session)
         mock_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
         
-        result = await provider.list_documents("empty:namespace")
+        result = await provider.list_documents("test_user", "empty_namespace", "text-embedding-ada-002")
         
         assert result == []
         mock_session.close.assert_called_once()
@@ -875,7 +943,10 @@ class TestDocumentListing:
         
         mock_doc = MagicMock()
         mock_doc.id = "doc-123"
-        mock_doc.namespace = "test:namespace"
+        mock_doc.user_id = "test_user"
+        mock_doc.namespace_type = "test_namespace"
+        mock_doc.embedding_model = "text-embedding-ada-002"
+        mock_doc.namespace_qualifier = None
         mock_doc.doc_type = "text"
         mock_doc.source = None
         mock_doc.title = None
@@ -885,7 +956,7 @@ class TestDocumentListing:
         
         mock_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [mock_doc]
         
-        result = await provider.list_documents("test:namespace")
+        result = await provider.list_documents("test_user", "test_namespace", "text-embedding-ada-002")
         
         assert len(result) == 1
         assert result[0].metadata is None
@@ -899,7 +970,7 @@ class TestDocumentListing:
         mock_session.query.side_effect = SQLAlchemyError("Database error")
         
         with pytest.raises(SQLAlchemyError):
-            await provider.list_documents("test:namespace")
+            await provider.list_documents("test_user", "test_namespace", "text-embedding-ada-002")
         
         mock_session.close.assert_called_once()
 
@@ -912,48 +983,67 @@ class TestEdgeCasesAndErrorHandling:
     """Test edge cases and comprehensive error handling"""
     
     @pytest.mark.asyncio
-    async def test_malformed_json_metadata_document(self, provider, mock_session):
-        """Test handling malformed JSON in document metadata"""
+    async def test_complex_jsonb_metadata_document(self, provider, mock_session):
+        """Test handling complex JSONB metadata in document"""
         provider.SessionLocal = MagicMock(return_value=mock_session)
+        
+        complex_metadata = {
+            "nested": {"key": "value", "number": 123},
+            "array": [1, 2, 3],
+            "boolean": True,
+            "null_value": None
+        }
         
         mock_row = MagicMock()
         mock_row.id = "test-doc-123"
-        mock_row.namespace = "test:namespace"
+        mock_row.user_id = "test_user"
+        mock_row.namespace_type = "test_namespace"
+        mock_row.embedding_model = "text-embedding-ada-002"
+        mock_row.namespace_qualifier = None
         mock_row.doc_type = "text"
         mock_row.source = "test.txt"
         mock_row.title = "Test Document"
         mock_row.content = "Test content"
-        mock_row.doc_metadata = "invalid json {"  # Malformed JSON
+        mock_row.doc_metadata = complex_metadata  # Complex JSONB data
         mock_row.created_at = datetime.now(timezone.utc)
         
         mock_session.query.return_value.filter.return_value.first.return_value = mock_row
         
-        # Should handle malformed JSON gracefully, setting metadata to None
+        # Should handle complex JSONB metadata correctly
         result = await provider.get_document("test-doc-123")
         assert result is not None
-        assert result.metadata is None  # Malformed JSON results in None metadata
+        assert result.metadata == complex_metadata
     
     @pytest.mark.asyncio
-    async def test_malformed_json_metadata_chunk(self, provider, mock_session):
-        """Test handling malformed JSON in chunk metadata"""
+    async def test_complex_jsonb_metadata_chunk(self, provider, mock_session):
+        """Test handling complex JSONB metadata in chunk"""
         provider.SessionLocal = MagicMock(return_value=mock_session)
+        
+        complex_metadata = {
+            "chunk_info": {"index": 0, "total": 3},
+            "processing": ["nlp", "embedding"],
+            "confidence": 0.95
+        }
         
         mock_chunk = MagicMock()
         mock_chunk.id = "chunk-123"
         mock_chunk.document_id = "test-doc-123"
-        mock_chunk.namespace = "test:namespace"
+        mock_chunk.user_id = "test_user"
+        mock_chunk.namespace_type = "test_namespace"
+        mock_chunk.embedding_model = "text-embedding-ada-002"
+        mock_chunk.namespace_qualifier = None
         mock_chunk.chunk_index = 0
         mock_chunk.content = "Test content"
         mock_chunk.embedding.to_list.return_value = [0.1] * 2560
-        mock_chunk.chunk_metadata = "invalid json {"  # Malformed JSON
+        mock_chunk.chunk_metadata = complex_metadata  # Complex JSONB data
         mock_chunk.created_at = datetime.now(timezone.utc)
         
         mock_session.query.return_value.filter.return_value.order_by.return_value.all.return_value = [mock_chunk]
         
-        # Should handle malformed JSON gracefully, setting metadata to None
+        # Should handle complex JSONB metadata correctly
         results = await provider.get_chunks("test-doc-123")
         assert len(results) == 1
-        assert results[0].metadata is None  # Malformed JSON results in None metadata
+        assert results[0].metadata == complex_metadata
     
     @pytest.mark.asyncio
     async def test_unicode_content_handling(self, provider, mock_session):
@@ -962,7 +1052,10 @@ class TestEdgeCasesAndErrorHandling:
         
         unicode_doc = Document(
             id="unicode-doc-123",
-            namespace="test:namespace",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             doc_type=DocumentType.TEXT,
             content="Test with Unicode: 你好世界 🌍 émojis",
             metadata={"unicode": "测试数据"}
@@ -986,7 +1079,10 @@ class TestEdgeCasesAndErrorHandling:
         chunk = DocumentChunk(
             id="large-chunk-123",
             document_id="test-doc-123",
-            namespace="test:namespace",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             chunk_index=0,
             content="Test content",
             embedding=large_embedding,
@@ -1010,7 +1106,10 @@ class TestEdgeCasesAndErrorHandling:
         async def store_document(doc_id):
             doc = Document(
                 id=doc_id,
-                namespace="concurrent:namespace",
+                user_id="test_user",
+                namespace_type="concurrent_namespace",
+                embedding_model="text-embedding-ada-002",
+                namespace_qualifier=None,
                 doc_type=DocumentType.TEXT,
                 content=f"Content for {doc_id}"
             )
@@ -1031,7 +1130,10 @@ class TestEdgeCasesAndErrorHandling:
         mock_session.query.return_value.join.return_value.order_by.return_value.limit.return_value.all.return_value = []
         
         zero_embedding = [0.0] * 2560
-        filters = SearchFilters(limit=10)
+        filters = SearchFilters(
+            embedding_model="text-embedding-ada-002",
+            limit=10
+        )
         
         result = await provider.search_similar(zero_embedding, filters)
         
@@ -1050,7 +1152,10 @@ class TestEdgeCasesAndErrorHandling:
         value = 1.0 / math.sqrt(dim)
         normalized_embedding = [value] * dim
         
-        filters = SearchFilters(limit=10)
+        filters = SearchFilters(
+            embedding_model="text-embedding-ada-002",
+            limit=10
+        )
         
         result = await provider.search_similar(normalized_embedding, filters)
         
@@ -1076,7 +1181,10 @@ class TestPerformanceAndStress:
             chunk = DocumentChunk(
                 id=f"batch-chunk-{i}",
                 document_id="batch-doc-123",
-                namespace="batch:namespace",
+                user_id="test_user",
+                namespace_type="batch_namespace",
+                embedding_model="text-embedding-ada-002",
+                namespace_qualifier=None,
                 chunk_index=i,
                 content=f"Batch chunk {i} content",
                 embedding=[0.01 * i] * 2560,
@@ -1099,7 +1207,10 @@ class TestPerformanceAndStress:
         large_content = "A" * (10 * 1024 * 1024)  # 10MB
         doc = Document(
             id="large-doc-123",
-            namespace="large:namespace",
+            user_id="test_user",
+            namespace_type="large_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             doc_type=DocumentType.TEXT,
             content=large_content,
             metadata={"size": "10MB"}
@@ -1122,31 +1233,48 @@ class TestPerformanceAndStress:
             mock_chunk = MagicMock()
             mock_chunk.id = f"chunk-{i}"
             mock_chunk.document_id = f"doc-{i // 10}"
-            mock_chunk.namespace = "large:namespace"
+            mock_chunk.user_id = "test_user"
+            mock_chunk.namespace_type = "large_namespace"
+            mock_chunk.embedding_model = "text-embedding-ada-002"
+            mock_chunk.namespace_qualifier = None
             mock_chunk.chunk_index = i % 10
             mock_chunk.content = f"Chunk {i} content"
             mock_chunk.embedding.to_list.return_value = [0.1] * 2560
-            mock_chunk.chunk_metadata = json.dumps({"index": i})
+            mock_chunk.chunk_metadata = {"index": i}
             mock_chunk.created_at = datetime.now(timezone.utc)
             
             mock_doc = MagicMock()
             mock_doc.id = f"doc-{i // 10}"
-            mock_doc.namespace = "large:namespace"
+            mock_doc.user_id = "test_user"
+            mock_doc.namespace_type = "large_namespace"
+            mock_doc.embedding_model = "text-embedding-ada-002"
+            mock_doc.namespace_qualifier = None
             mock_doc.doc_type = "text"
             mock_doc.source = f"file{i}.txt"
             mock_doc.title = f"Document {i}"
             mock_doc.content = f"Document {i} content"
-            mock_doc.doc_metadata = json.dumps({"doc_index": i // 10})
+            mock_doc.doc_metadata = {"doc_index": i // 10}
             mock_doc.created_at = datetime.now(timezone.utc)
             
             mock_results.append((mock_chunk, mock_doc))
         
-        mock_session.query.return_value.join.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = mock_results
+        # Use a MagicMock that returns itself for chaining
+        mock_query = MagicMock()
+        mock_query.join.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = mock_results
+        mock_session.query.return_value = mock_query
+        
+        # Also set up the distance query separately
         mock_session.query.return_value.filter.return_value.scalar.return_value = 0.5
         
         # Set high limit to test large result handling
         filters = SearchFilters(
-            namespaces=["large:namespace"],
+            user_id="test_user",
+            namespace_types=["large_namespace"],
+            embedding_model="text-embedding-ada-002",
             limit=1000
         )
         query_embedding = [0.5] * 2560
@@ -1172,7 +1300,10 @@ class TestIntegrationAndWorkflow:
         # Step 1: Store document
         doc = Document(
             id="workflow-doc-123",
-            namespace="workflow:namespace",
+            user_id="test_user",
+            namespace_type="workflow_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             doc_type=DocumentType.MARKDOWN,
             source="workflow.md",
             title="Workflow Test",
@@ -1188,7 +1319,10 @@ class TestIntegrationAndWorkflow:
             DocumentChunk(
                 id="workflow-chunk-1",
                 document_id=doc.id,
-                namespace=doc.namespace,
+                user_id=doc.user_id,
+                namespace_type=doc.namespace_type,
+                embedding_model=doc.embedding_model,
+                namespace_qualifier=doc.namespace_qualifier,
                 chunk_index=0,
                 content="# Workflow Test",
                 embedding=[0.1] * 2560,
@@ -1197,7 +1331,10 @@ class TestIntegrationAndWorkflow:
             DocumentChunk(
                 id="workflow-chunk-2",
                 document_id=doc.id,
-                namespace=doc.namespace,
+                user_id=doc.user_id,
+                namespace_type=doc.namespace_type,
+                embedding_model=doc.embedding_model,
+                namespace_qualifier=doc.namespace_qualifier,
                 chunk_index=1,
                 content="This is a test document.",
                 embedding=[0.2] * 2560,
@@ -1221,32 +1358,46 @@ class TestIntegrationAndWorkflow:
         mock_chunk_row = MagicMock()
         mock_chunk_row.id = "found-chunk-123"
         mock_chunk_row.document_id = "found-doc-123"
-        mock_chunk_row.namespace = "search:namespace"
+        mock_chunk_row.user_id = "test_user"
+        mock_chunk_row.namespace_type = "search_namespace"
+        mock_chunk_row.embedding_model = "text-embedding-ada-002"
+        mock_chunk_row.namespace_qualifier = None
         mock_chunk_row.chunk_index = 0
         mock_chunk_row.content = "Found content"
         mock_chunk_row.embedding.to_list.return_value = [0.3] * 2560
-        mock_chunk_row.chunk_metadata = json.dumps({"found": True})
+        mock_chunk_row.chunk_metadata = {"found": True}
         mock_chunk_row.created_at = datetime.now(timezone.utc)
         
         mock_doc_row = MagicMock()
         mock_doc_row.id = "found-doc-123"
-        mock_doc_row.namespace = "search:namespace"
+        mock_doc_row.user_id = "test_user"
+        mock_doc_row.namespace_type = "search_namespace"
+        mock_doc_row.embedding_model = "text-embedding-ada-002"
+        mock_doc_row.namespace_qualifier = None
         mock_doc_row.doc_type = "text"
         mock_doc_row.source = "found.txt"
         mock_doc_row.title = "Found Document"
         mock_doc_row.content = "Full found document content"
-        mock_doc_row.doc_metadata = json.dumps({"searchable": True})
+        mock_doc_row.doc_metadata = {"searchable": True}
         mock_doc_row.created_at = datetime.now(timezone.utc)
         
-        # Setup search to return results (with namespace filter)
-        mock_session.query.return_value.join.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [
-            (mock_chunk_row, mock_doc_row)
-        ]
+        # Use a MagicMock that returns itself for chaining
+        mock_query = MagicMock()
+        mock_query.join.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.limit.return_value = mock_query
+        mock_query.all.return_value = [(mock_chunk_row, mock_doc_row)]
+        mock_session.query.return_value = mock_query
+        
+        # Also set up the distance query separately
         mock_session.query.return_value.filter.return_value.scalar.return_value = 0.2
         
         # Step 1: Search
         filters = SearchFilters(
-            namespaces=["search:namespace"],
+            user_id="search_user",
+            namespace_types=["search_namespace"],
+            embedding_model="text-embedding-ada-002",
             limit=10
         )
         query_embedding = [0.5] * 2560
@@ -1278,12 +1429,15 @@ class TestIntegrationAndWorkflow:
         # Mock existing document
         mock_doc = MagicMock()
         mock_doc.id = "cleanup-doc-123"
-        mock_doc.namespace = "test:namespace"
+        mock_doc.user_id = "test_user"
+        mock_doc.namespace_type = "test_namespace"
+        mock_doc.embedding_model = "text-embedding-ada-002"
+        mock_doc.namespace_qualifier = None
         mock_doc.doc_type = "text"
         mock_doc.source = "cleanup.txt"
         mock_doc.title = "Cleanup Document"
         mock_doc.content = "Document to be cleaned up"
-        mock_doc.doc_metadata = json.dumps({"cleanup": True})
+        mock_doc.doc_metadata = {"cleanup": True}
         mock_doc.created_at = datetime.now(timezone.utc)
         mock_session.query.return_value.filter.return_value.first.return_value = mock_doc
         

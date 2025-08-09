@@ -71,46 +71,41 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
         
         # Set up test data for each user
         for test_user_id, test_agent in test_agents.items():
-            # Use base namespaces without embedding model - the knowledge base will append it
-            base_conversations_ns = f"conversations:{test_user_id}"
-            base_documents_ns = f"documents:{test_user_id}"
-            
             logger.info(f"Creating test data for user {test_user_id}:")
-            logger.info(f"  Conversations base: {base_conversations_ns}")
-            logger.info(f"  Documents base: {base_documents_ns}")
-            logger.info(f"  Embedding model (to be appended): {embedding_model}")
+            logger.info(f"  User ID: {test_user_id}")
+            logger.info(f"  Namespace types: conversations, documents")
+            logger.info(f"  Embedding model: {embedding_model}")
         
             # Define test documents with completely fictional content to avoid training data contamination
             test_documents = [
                 {
                     "title": "Quixel Token Protocol Implementation Meeting",
-                    "content": (
-                        "Team Phoenix meeting from 2024-11-15: Discussed Quixel Token Protocol (QTP-3) implementation for Project Stellaris. "
+                    "content": ("Team Phoenix meeting from 2024-11-15: Discussed Quixel Token Protocol (QTP-3) implementation for Project Stellaris. "
                         "Key decisions: Use QTP tokens with 45-minute expiration, implement cascade refresh mechanism, "
                         "store sessions in MemoryVault for scalability. Security lead Zara Chen proposed token scrambling algorithm with entropy seeds."
                     ),
-                    "namespace": base_conversations_ns,  # Base namespace - KB will append embedding model
+                    "namespace_type": "conversations",
                     "source": "qtp_implementation_meeting_2024-11-15",
                     "metadata": {"topic": "authentication", "date": "2024-11-15", "team": "phoenix", "project": "stellaris"}
                 },
                 {
                     "title": "NebulaSoft Architecture - Service Discovery",
                     "content": "Team Aurora conversation: Discussed service discovery using MeshLink Protocol and NodeTracker v2.1 for Project Stellaris",
-                    "namespace": base_conversations_ns,  # Base namespace - KB will append embedding model
+                    "namespace_type": "conversations",
                     "source": "nebula_service_discovery",
                     "metadata": {"topic": "nebula_architecture", "subtopic": "service_discovery", "project": "stellaris"}
                 },
                 {
                     "title": "NebulaSoft Architecture - Gateway Routing",
                     "content": "Team meeting notes: Gateway routing patterns with GatewayPrime and RouteForge for handling 50K requests per second",
-                    "namespace": base_conversations_ns,  # Base namespace - KB will append embedding model
+                    "namespace_type": "conversations",
                     "source": "nebula_gateway_routing",
                     "metadata": {"topic": "nebula_architecture", "subtopic": "gateway_routing", "project": "stellaris"}
                 },
                 {
                     "title": "NebulaSoft Architecture - ContainerFlux Deployment",
                     "content": "Technical discussion: ContainerFlux deployment using Orbital Charts and FluxOps methodology with auto-scaling to 200 pods",
-                    "namespace": base_conversations_ns,  # Base namespace - KB will append embedding model
+                    "namespace_type": "conversations",
                     "source": "nebula_containerflux",
                     "metadata": {"topic": "nebula_architecture", "subtopic": "containerflux", "project": "stellaris"}
                 },
@@ -120,7 +115,7 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
                         "DataHaven Optimization Meeting with Team Phoenix: Created quantum indexes on (nebula_id, flux_timestamp), "
                         "optimized slow queries using QUANTUM ANALYZE, configured StreamPool for connection handling with 150 parallel streams"
                     ),
-                    "namespace": base_conversations_ns,  # Base namespace - KB will append embedding model
+                    "namespace_type": "conversations",
                     "source": "datahaven_optimization_discussion",
                     "metadata": {"topic": "database", "subtopic": "optimization", "system": "datahaven"}
                 },
@@ -128,14 +123,14 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
                 {
                     "title": "Stellaris API Design",
                     "content": "Discussion about HyperLink API design patterns and quantum response formatting for Project Stellaris endpoints",
-                    "namespace": base_documents_ns,  # Base namespace - KB will append embedding model
+                    "namespace_type": "documents",
                     "source": "stellaris_api_design",
                     "metadata": {"topic": "api_design", "project": "stellaris"}
                 },
                 {
                     "title": "FluxContainer Deployment",
                     "content": "FluxContainer orchestration and deployment strategies using NebulaSoft's proprietary container system",
-                    "namespace": base_documents_ns,  # Base namespace - KB will append embedding model
+                    "namespace_type": "documents",
                     "source": "fluxcontainer_deployment",
                     "metadata": {"topic": "deployment", "technology": "fluxcontainer"}
                 }
@@ -146,7 +141,8 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
                 try:
                     doc_id = await test_agent.knowledge_base.ingest_document(
                         content=doc["content"],
-                        namespace=doc["namespace"],
+                        user_id=test_user_id,
+                        namespace_type=doc["namespace_type"],
                         doc_type=DocumentType.CONVERSATION,
                         source=doc["source"],
                         title=doc["title"],
@@ -166,11 +162,10 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
         for test_user_id, test_agent in test_agents.items():
             try:
                 # Try a simple search to verify data is accessible
-                # Use the namespace with embedding model appended for verification
-                verify_namespace = f"conversations:{test_user_id}:{embedding_model}"
                 results = await test_agent.knowledge_base.search(
                     query="Quixel Token Protocol MemoryVault",
-                    namespaces=[verify_namespace],
+                    user_id=test_user_id,
+                    namespace_types=["conversations"],
                     limit=1
                 )
                 
@@ -178,8 +173,9 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
                     logger.info(f"✓ Test data verification passed for user {test_user_id} - found {len(results)} results")
                 else:
                     logger.warning(f"✗ Test data verification failed for user {test_user_id} - no results found")
-                    logger.warning(f"  Search namespace: {verify_namespace}")
-                    logger.warning("  This may indicate the namespace mismatch issue persists")
+                    logger.warning(f"  User ID: {test_user_id}")
+                    logger.warning(f"  Namespace type: conversations")
+                    logger.warning(f"  Embedding model: {embedding_model}")
             except Exception as e:
                 logger.error(f"Test data verification error for user {test_user_id}: {e}")
         

@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, ForeignKey, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, Session, declarative_base, relationship
 from sqlalchemy.exc import SQLAlchemyError
 from pgvector.sqlalchemy import Vector, HALFVEC
@@ -15,25 +16,21 @@ from app.utils.logging import logger
 
 Base = declarative_base()
 
-def safe_json_loads(value):
-    """Safely parse JSON string, return None if parsing fails."""
-    if value and isinstance(value, str):
-        try:
-            return json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            return None
-    return None
+# Note: With JSONB columns, metadata is automatically parsed by PostgreSQL
 
 class DocumentTable(Base):
     __tablename__ = 'knowledge_documents'
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))  
-    namespace = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(100), nullable=False, index=True)
+    namespace_type = Column(String(50), nullable=False, index=True)
+    embedding_model = Column(String(100), nullable=False, index=True)
+    namespace_qualifier = Column(String(255), nullable=True)
     doc_type = Column(String(50), nullable=False)
     source = Column(String(500))
     title = Column(String(255))
     content = Column(Text, nullable=False)
-    doc_metadata = Column(Text)  # JSON
+    doc_metadata = Column(JSONB)  # JSON stored as JSONB for efficient queries
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     chunks = relationship("ChunkTable", back_populates="document", cascade="all, delete-orphan")
@@ -43,11 +40,14 @@ class ChunkTable(Base):
     
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4())) 
     document_id = Column(String(36), ForeignKey('knowledge_documents.id'), nullable=False)
-    namespace = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(100), nullable=False, index=True)
+    namespace_type = Column(String(50), nullable=False, index=True)
+    embedding_model = Column(String(100), nullable=False, index=True)
+    namespace_qualifier = Column(String(255), nullable=True)
     chunk_index = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
     embedding = Column(HALFVEC(2560), nullable=False)
-    chunk_metadata = Column(Text)  # JSON
+    chunk_metadata = Column(JSONB)  # JSON stored as JSONB for efficient queries
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     document = relationship("DocumentTable", back_populates="chunks")
@@ -60,10 +60,19 @@ hnsw_index = Index(
     postgresql_ops={'embedding': 'halfvec_cosine_ops'}
 )
 
-# Namespace index for faster filtering
-namespace_index = Index(
-    'ix_chunks_namespace',
-    ChunkTable.namespace
+# Composite index for namespace columns
+namespace_composite_index = Index(
+    'ix_documents_namespace_composite',
+    DocumentTable.user_id,
+    DocumentTable.namespace_type,
+    DocumentTable.embedding_model
+)
+
+chunk_namespace_composite_index = Index(
+    'ix_chunks_namespace_composite',
+    ChunkTable.user_id,
+    ChunkTable.namespace_type,
+    ChunkTable.embedding_model
 )
 
 # Temporal index for conversation queries
@@ -75,7 +84,8 @@ temporal_index = Index(
 # Composite index for namespace and doc_type
 namespace_doctype_index = Index(
     'ix_documents_namespace_doctype',
-    DocumentTable.namespace,
+    DocumentTable.user_id,
+    DocumentTable.namespace_type,
     DocumentTable.doc_type
 )
 
@@ -159,12 +169,15 @@ class PGVectorProvider(VectorStoreProvider):
             # Document ID is always provided by client
             db_doc = DocumentTable(
                 id=document.id,
-                namespace=document.namespace,
+                user_id=document.user_id,
+                namespace_type=document.namespace_type,
+                embedding_model=document.embedding_model,
+                namespace_qualifier=document.namespace_qualifier,
                 doc_type=document.doc_type.value,
                 source=document.source,
                 title=document.title,
                 content=document.content,
-                doc_metadata=json.dumps(document.metadata) if document.metadata else None
+                doc_metadata=document.metadata if document.metadata else None
             )
             
             session.add(db_doc)
@@ -189,11 +202,14 @@ class PGVectorProvider(VectorStoreProvider):
                 db_chunk = ChunkTable(
                     id=chunk.id,
                     document_id=chunk.document_id,
-                    namespace=chunk.namespace,
+                    user_id=chunk.user_id,
+                    namespace_type=chunk.namespace_type,
+                    embedding_model=chunk.embedding_model,
+                    namespace_qualifier=chunk.namespace_qualifier,
                     chunk_index=chunk.chunk_index,
                     content=chunk.content,
                     embedding=chunk.embedding,
-                    chunk_metadata=json.dumps(chunk.metadata) if chunk.metadata else None
+                    chunk_metadata=chunk.metadata if chunk.metadata else None
                 )
                 session.add(db_chunk)
                 chunk_ids.append(chunk.id)
@@ -219,9 +235,13 @@ class PGVectorProvider(VectorStoreProvider):
                 DocumentTable, ChunkTable.document_id == DocumentTable.id
             )
             
-            # Apply namespace filter
-            if filters.namespaces:
-                query = query.filter(ChunkTable.namespace.in_(filters.namespaces))
+            # Apply structured namespace filters
+            if filters.user_id:
+                query = query.filter(ChunkTable.user_id == filters.user_id)
+            if filters.namespace_types:
+                query = query.filter(ChunkTable.namespace_type.in_(filters.namespace_types))
+            if filters.embedding_model:
+                query = query.filter(ChunkTable.embedding_model == filters.embedding_model)
             
             # Apply document type filter
             if filters.doc_types:
@@ -247,11 +267,14 @@ class PGVectorProvider(VectorStoreProvider):
                 chunk = DocumentChunk(
                     id=chunk_row.id,
                     document_id=chunk_row.document_id,
-                    namespace=chunk_row.namespace,
+                    user_id=chunk_row.user_id,
+                    namespace_type=chunk_row.namespace_type,
+                    embedding_model=chunk_row.embedding_model,
+                    namespace_qualifier=chunk_row.namespace_qualifier,
                     chunk_index=chunk_row.chunk_index,
                     content=chunk_row.content,
                     embedding=chunk_row.embedding.to_list(),
-                    metadata=safe_json_loads(chunk_row.chunk_metadata),
+                    metadata=chunk_row.chunk_metadata,
                     created_at=chunk_row.created_at
                 )
                 
@@ -263,12 +286,15 @@ class PGVectorProvider(VectorStoreProvider):
                 
                 document = Document(
                     id=doc_row.id,
-                    namespace=doc_row.namespace,
+                    user_id=doc_row.user_id,
+                    namespace_type=doc_row.namespace_type,
+                    embedding_model=doc_row.embedding_model,
+                    namespace_qualifier=doc_row.namespace_qualifier,
                     doc_type=doc_type,
                     source=doc_row.source,
                     title=doc_row.title,
                     content=doc_row.content,
-                    metadata=safe_json_loads(doc_row.doc_metadata),
+                    metadata=doc_row.doc_metadata,
                     created_at=doc_row.created_at
                 )
                 
@@ -302,11 +328,14 @@ class PGVectorProvider(VectorStoreProvider):
                 doc_type = DocumentType.TEXT
             
             # Parse metadata safely
-            metadata = safe_json_loads(doc_row.doc_metadata)
+            metadata = doc_row.doc_metadata
             
             return Document(
                 id=doc_row.id,
-                namespace=doc_row.namespace,
+                user_id=doc_row.user_id,
+                namespace_type=doc_row.namespace_type,
+                embedding_model=doc_row.embedding_model,
+                namespace_qualifier=doc_row.namespace_qualifier,
                 doc_type=doc_type,
                 source=doc_row.source,
                 title=doc_row.title,
@@ -335,11 +364,14 @@ class PGVectorProvider(VectorStoreProvider):
                 chunks.append(DocumentChunk(
                     id=chunk_row.id,
                     document_id=chunk_row.document_id,
-                    namespace=chunk_row.namespace,
+                    user_id=chunk_row.user_id,
+                    namespace_type=chunk_row.namespace_type,
+                    embedding_model=chunk_row.embedding_model,
+                    namespace_qualifier=chunk_row.namespace_qualifier,
                     chunk_index=chunk_row.chunk_index,
                     content=chunk_row.content,
                     embedding=chunk_row.embedding.to_list(),
-                    metadata=safe_json_loads(chunk_row.chunk_metadata),
+                    metadata=chunk_row.chunk_metadata,
                     created_at=chunk_row.created_at
                 ))
             
@@ -373,13 +405,15 @@ class PGVectorProvider(VectorStoreProvider):
         finally:
             session.close()
 
-    async def list_documents(self, namespace: str) -> List[Document]:
-        """List documents in a namespace."""
+    async def list_documents(self, user_id: str, namespace_type: str, embedding_model: str) -> List[Document]:
+        """List documents for a user in a specific namespace type and embedding model."""
         try:
             session = self._get_session()
             
             doc_rows = session.query(DocumentTable).filter(
-                DocumentTable.namespace == namespace
+                DocumentTable.user_id == user_id,
+                DocumentTable.namespace_type == namespace_type,
+                DocumentTable.embedding_model == embedding_model
             ).order_by(DocumentTable.created_at.desc()).all()
             
             documents = []
@@ -392,12 +426,15 @@ class PGVectorProvider(VectorStoreProvider):
                 
                 documents.append(Document(
                     id=doc_row.id,
-                    namespace=doc_row.namespace,
+                    user_id=doc_row.user_id,
+                    namespace_type=doc_row.namespace_type,
+                    embedding_model=doc_row.embedding_model,
+                    namespace_qualifier=doc_row.namespace_qualifier,
                     doc_type=doc_type,
                     source=doc_row.source,
                     title=doc_row.title,
                     content=doc_row.content,
-                    metadata=safe_json_loads(doc_row.doc_metadata),
+                    metadata=doc_row.doc_metadata,
                     created_at=doc_row.created_at
                 ))
             

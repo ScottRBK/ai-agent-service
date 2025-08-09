@@ -78,7 +78,10 @@ class TestKnowledgeBaseResource:
         """Sample document for testing."""
         return Document(
             id="doc-123",
-            namespace="test_namespace:text-embedding-ada-002",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             doc_type=DocumentType.TEXT,
             source="test.txt",
             title="Test Document",
@@ -92,7 +95,10 @@ class TestKnowledgeBaseResource:
         return DocumentChunk(
             id="chunk-123",
             document_id="doc-123",
-            namespace="test_namespace:text-embedding-ada-002",
+            user_id="test_user",
+            namespace_type="test_namespace",
+            embedding_model="text-embedding-ada-002",
+            namespace_qualifier=None,
             chunk_index=0,
             content="This is a test document.",
             embedding=[0.1, 0.2, 0.3, 0.4],
@@ -308,21 +314,6 @@ class TestKnowledgeBaseResource:
         result = knowledge_base_resource._get_chunking_strategy(DocumentType.TEXT)
         assert isinstance(result, SimpleChunkingStrategy)
 
-    # Namespace Creation Tests
-    
-    def test_create_model_namespace(self, knowledge_base_resource):
-        """Test model namespace creation."""
-        knowledge_base_resource.embedding_model = "text-embedding-ada-002"
-        
-        result = knowledge_base_resource._create_model_namespace("test_namespace")
-        
-        assert result == "test_namespace:text-embedding-ada-002"
-    
-    def test_create_model_namespace_no_model(self, knowledge_base_resource):
-        """Test model namespace creation without embedding model."""
-        with pytest.raises(ResourceError, match="No embedding model configured"):
-            knowledge_base_resource._create_model_namespace("test_namespace")
-
     # Document Ingestion Tests
     
     @pytest.mark.asyncio
@@ -351,7 +342,8 @@ class TestKnowledgeBaseResource:
                 with patch.object(knowledge_base_resource, 'record_successful_call') as mock_record:
                     result = await knowledge_base_resource.ingest_document(
                         content="Test content",
-                        namespace="test_namespace",
+                        user_id="test_user",
+                        namespace_type="test_namespace",
                         doc_type=DocumentType.TEXT,
                         source="test.txt",
                         title="Test Document",
@@ -364,7 +356,9 @@ class TestKnowledgeBaseResource:
                     mock_vector_provider.store_document.assert_called_once()
                     stored_doc = mock_vector_provider.store_document.call_args[0][0]
                     assert stored_doc.id == "doc-123"
-                    assert stored_doc.namespace == "test_namespace:text-embedding-ada-002"
+                    assert stored_doc.user_id == "test_user"
+                    assert stored_doc.namespace_type == "test_namespace"
+                    assert stored_doc.embedding_model == "text-embedding-ada-002"
                     assert stored_doc.content == "Test content"
                     
                     # Verify chunk storage
@@ -385,7 +379,8 @@ class TestKnowledgeBaseResource:
         with pytest.raises(ResourceError, match="No embedding model configured"):
             await knowledge_base_resource.ingest_document(
                 content="Test content",
-                namespace="test_namespace",
+                user_id="test_user",
+                namespace_type="test_namespace",
                 doc_type=DocumentType.TEXT
             )
     
@@ -403,7 +398,8 @@ class TestKnowledgeBaseResource:
                 with pytest.raises(ResourceError, match="Failed to ingest document"):
                     await knowledge_base_resource.ingest_document(
                         content="Test content",
-                        namespace="test_namespace",
+                        user_id="test_user",
+                        namespace_type="test_namespace",
                         doc_type=DocumentType.TEXT
                     )
                 
@@ -422,7 +418,8 @@ class TestKnowledgeBaseResource:
         with patch.object(knowledge_base_resource, 'record_successful_call') as mock_record:
             result = await knowledge_base_resource.search(
                 query="test query",
-                namespaces=["test_namespace"],
+                user_id="test_user",
+                namespace_types=["test_namespace"],
                 doc_types=[DocumentType.TEXT],
                 limit=10,
                 use_reranking=False
@@ -444,7 +441,9 @@ class TestKnowledgeBaseResource:
             filters = call_args[0][1]
             
             assert query_embedding == [0.1, 0.2, 0.3, 0.4]
-            assert filters.namespaces == ["test_namespace:text-embedding-ada-002"]
+            assert filters.user_id == "test_user"
+            assert filters.namespace_types == ["test_namespace"]
+            assert filters.embedding_model == "text-embedding-ada-002"
             assert filters.doc_types == [DocumentType.TEXT]
             assert filters.limit == 10
             
@@ -485,10 +484,12 @@ class TestKnowledgeBaseResource:
         
         await knowledge_base_resource.search(query="test query")
         
-        # Verify filters have no namespaces
+        # Verify filters have no user_id or namespace_types
         call_args = mock_vector_provider.search_similar.call_args
         filters = call_args[0][1]
-        assert filters.namespaces is None
+        assert filters.user_id is None
+        assert filters.namespace_types is None
+        assert filters.embedding_model == "text-embedding-ada-002"  # But embedding model should still be set
     
     @pytest.mark.asyncio
     async def test_search_embedding_failure(self, knowledge_base_resource, mock_embedding_provider):
@@ -591,14 +592,14 @@ class TestKnowledgeBaseResource:
         mock_vector_provider.list_documents.return_value = [sample_document]
         
         with patch.object(knowledge_base_resource, 'record_successful_call') as mock_record:
-            result = await knowledge_base_resource.list_documents("test_namespace")
+            result = await knowledge_base_resource.list_documents("test_user", "test_namespace")
             
             assert len(result) == 1
             assert result[0] == sample_document
             
-            # Verify model namespace was used
+            # Verify correct parameters were used
             mock_vector_provider.list_documents.assert_called_once_with(
-                "test_namespace:text-embedding-ada-002"
+                "test_user", "test_namespace", "text-embedding-ada-002"
             )
             mock_record.assert_called_once()
     
@@ -611,7 +612,7 @@ class TestKnowledgeBaseResource:
         
         with patch.object(knowledge_base_resource, 'record_failed_call') as mock_record_failed:
             with pytest.raises(ResourceError, match="Failed to list documents"):
-                await knowledge_base_resource.list_documents("test_namespace")
+                await knowledge_base_resource.list_documents("test_user", "test_namespace")
             
             mock_record_failed.assert_called_once()
     

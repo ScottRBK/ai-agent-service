@@ -57,6 +57,6 @@ class VectorStoreProvider(ABC):
         pass
     
     @abstractmethod
-    async def list_documents(self, namespace: str) -> List[Document]:
-        """List documents in a namespace."""
+    async def list_documents(self, user_id: str, namespace_type: str, embedding_model: str) -> List[Document]:
+        """List documents for a user in a specific namespace type and embedding model."""
         pass

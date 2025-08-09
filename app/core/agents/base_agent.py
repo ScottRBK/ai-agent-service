@@ -358,7 +358,8 @@ class BaseAgent:
             # Search for relevant past conversations
             results = await self.knowledge_base.search(
                 query=query,
-                namespaces=[f"conversations:{self.user_id}"],
+                user_id=self.user_id,
+                namespace_types=["conversations"],
                 limit=10,
                 use_reranking=True
             )

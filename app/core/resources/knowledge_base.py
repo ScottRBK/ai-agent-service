@@ -115,32 +115,33 @@ class KnowledgeBaseResource(BaseResource):
             from app.core.resources.chunking.simple import SimpleChunkingStrategy
             return SimpleChunkingStrategy()
         
-    def _create_model_namespace(self, base_namespace: str) -> str:
-        """Create namespace that includes embedding model for dimension consistency."""
-        if not self.embedding_model:
-            raise ResourceError("No embedding model configured", self.resource_id)
-        return f"{base_namespace}:{self.embedding_model}"
 
     async def ingest_document(self, 
                             content: str,
-                            namespace: str,
+                            user_id: str,
+                            namespace_type: str,
                             doc_type: DocumentType,
                             source: Optional[str] = None,
                             title: Optional[str] = None,
-                            metadata: Optional[Dict[str, Any]] = None) -> str:
+                            metadata: Optional[Dict[str, Any]] = None,
+                            namespace_qualifier: Optional[str] = None) -> str:
         """Ingest a document into the knowledge base."""
         try:
             # Generate UUID for the document
             import uuid
             document_id = str(uuid.uuid4())
             
-            # Create model-specific namespace for dimension consistency
-            model_namespace = self._create_model_namespace(namespace)
+            # Ensure embedding model is set
+            if not self.embedding_model:
+                raise ResourceError("No embedding model configured", self.resource_id)
             
-            # Store the document
+            # Store the document with structured namespace
             document = Document(
                 id=document_id,
-                namespace=model_namespace,
+                user_id=user_id,
+                namespace_type=namespace_type,
+                embedding_model=self.embedding_model,
+                namespace_qualifier=namespace_qualifier,
                 doc_type=doc_type,
                 source=source,
                 title=title,
@@ -161,7 +162,10 @@ class KnowledgeBaseResource(BaseResource):
                 chunk = DocumentChunk(
                     id=str(uuid.uuid4()),  # Generate UUID for each chunk
                     document_id=document_id,
-                    namespace=model_namespace,
+                    user_id=user_id,
+                    namespace_type=namespace_type,
+                    embedding_model=self.embedding_model,
+                    namespace_qualifier=namespace_qualifier,
                     chunk_index=i,
                     content=chunk_text,
                     embedding=embedding,
@@ -173,7 +177,7 @@ class KnowledgeBaseResource(BaseResource):
             await self.vector_provider.store_chunks(chunks)
             
             await self.record_successful_call()
-            logger.info(f"Ingested document {document_id} with {len(chunks)} chunks in namespace {model_namespace}")
+            logger.info(f"Ingested document {document_id} with {len(chunks)} chunks for user {user_id} in {namespace_type}")
             return document_id
             
         except Exception as e:
@@ -182,7 +186,8 @@ class KnowledgeBaseResource(BaseResource):
         
     async def search(self, 
                     query: str,
-                    namespaces: Optional[List[str]] = None,
+                    user_id: Optional[str] = None,
+                    namespace_types: Optional[List[str]] = None,
                     doc_types: Optional[List[DocumentType]] = None,
                     limit: int = 10,
                     use_reranking: bool = True) -> List[SearchResult]:
@@ -191,10 +196,9 @@ class KnowledgeBaseResource(BaseResource):
             # Generate query embedding
             query_embedding = await self._generate_embedding(query)
             
-            # Convert base namespaces to model-specific namespaces
-            model_namespaces = None
-            if namespaces:
-                model_namespaces = [self._create_model_namespace(ns) for ns in namespaces]
+            # Ensure embedding model is set for filtering
+            if not self.embedding_model:
+                raise ResourceError("No embedding model configured", self.resource_id)
             
             # Determine search limit based on reranking
             search_limit = limit
@@ -202,10 +206,12 @@ class KnowledgeBaseResource(BaseResource):
                 # Use larger limit for first stage, then rerank to final limit
                 search_limit = max(limit, self.rerank_limit)
             
-            # Create search filters
+            # Create search filters with structured namespace
             filters = SearchFilters(
-                namespaces=model_namespaces,
+                user_id=user_id,
+                namespace_types=namespace_types,
                 doc_types=doc_types,
+                embedding_model=self.embedding_model,
                 limit=search_limit
             )
             logger.debug(f"KnowledgeBase - search - filters: {filters}")
@@ -259,12 +265,14 @@ class KnowledgeBaseResource(BaseResource):
             await self.record_failed_call(ResourceError(f"Get document failed: {e}", self.resource_id))
             raise ResourceError(f"Failed to get document: {e}", self.resource_id)
         
-    async def list_documents(self, namespace: str) -> List[Document]:
+    async def list_documents(self, user_id: str, namespace_type: str) -> List[Document]:
         """List documents in a namespace."""
         try:
-            # Convert to model-specific namespace
-            model_namespace = self._create_model_namespace(namespace)
-            result = await self.vector_provider.list_documents(model_namespace)
+            # Ensure embedding model is set
+            if not self.embedding_model:
+                raise ResourceError("No embedding model configured", self.resource_id)
+            
+            result = await self.vector_provider.list_documents(user_id, namespace_type, self.embedding_model)
             await self.record_successful_call()
             return result
         except Exception as e:
