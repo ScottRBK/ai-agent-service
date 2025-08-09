@@ -26,6 +26,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any
 
+agent_id = "knowledge_agent"
 
 @asynccontextmanager
 async def knowledge_agent_test_context(test_users: List[str] = None):
@@ -382,7 +383,7 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
     
     # Create complete configuration
     return EvaluationConfig(
-        agent_id="knowledge_agent",
+        agent_id=agent_id,
         synthesizer_config=SynthesizerConfig(
             model=synthesis_model,  # Use smaller/faster model for synthesis
             styling_config=styling_config,
@@ -390,9 +391,9 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
         ),
         metrics=metrics,
         contexts=contexts,
-        dataset_name="knowledge_agent",
-        dataset_file="knowledge_agent_goldens.pkl",
-        results_file="knowledge_agent_results"
+        dataset_name=f"{agent_id}_knowledge_base_eval",
+        dataset_file=f"{agent_id}_knowledge_base_eval_goldens.pkl",
+        results_file=f"{agent_id}_knowledge_base_eval_results"
     )
 
 
