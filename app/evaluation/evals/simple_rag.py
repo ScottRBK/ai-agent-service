@@ -193,13 +193,13 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
     
     # Styling configuration for synthesizer
     styling_config = StylingConfig(
-        scenario="User asking questions about Project Stellaris that require knowledge base searches",
+        scenario="User asking questions about a previous meeting that requires information from a knowledge base",
         task="Generate queries that clearly indicate knowledge base operations about fictional technologies",
         input_format="""
-        - Search queries: "What did Team Phoenix discuss about Quixel Token Protocol?", "Find information about DataHaven optimization", "Search for NebulaSoft architecture discussions"
+        - Search queries: "What did Team Phoenix discuss about Quixel Token Protocol?", 
         - Document listing: "Show my Project Stellaris conversations", "What topics have we covered for Team Phoenix?"
         """,
-        expected_output_format="A helpful response using information retrieved from the knowledge base about Project Stellaris and NebulaSoft technologies"
+        expected_output_format="A helpful response using information retrieved from the knowledge base about Project Stellaris"
     )
     
     # Contexts with expected tools and retrieval context for RAG metrics - using fictional content
@@ -207,17 +207,15 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
         ContextWithMetadata(
             context=[
                 "Team Phoenix previously discussed implementing Quixel Token Protocol with 45-minute token expiration and MemoryVault for session storage. "
-                "The conversation covered security measures including token scrambling with entropy seeds."
+                "The conversation covered security measures including token scrambling with entropy seeds. Security lead Zara Chen proposed token scrambling algorithm with entropy seeds."
             ],
             tools=["search_knowledge_base"],
             expected_output="Based on Team Phoenix's discussion, you decided to implement Quixel Token Protocol (QTP-3) with 45-minute token expiration and use MemoryVault for session storage. Zara Chen proposed token scrambling algorithm with entropy seeds.",
             retrieval_context=[
                 "Team Phoenix meeting from 2024-11-15: Discussed Quixel Token Protocol (QTP-3) implementation for Project Stellaris. "
-                "Key decisions: Use QTP tokens with 45-minute expiration, implement cascade refresh mechanism, "
-                "store sessions in MemoryVault for scalability. Security lead Zara Chen proposed token scrambling algorithm with entropy seeds."
-            ],
-            user_id=test_user_1,
-            session_id=f"session_{uuid.uuid4()}"
+                        "Key decisions: Use QTP tokens with 45-minute expiration, implement cascade refresh mechanism, "
+                        "store sessions in MemoryVault for scalability. Security lead Zara Chen proposed token scrambling algorithm with entropy seeds."
+            ]
         )
     ]
     
