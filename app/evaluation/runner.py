@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 from deepeval import evaluate
 from deepeval.test_case import LLMTestCase, ToolCall
 from app.core.agents.cli_agent import CLIAgent
+from app.utils.chat_utils import separate_chain_of_thought
 import pandas as pd
 import asyncio
 from contextlib import redirect_stdout, redirect_stderr
@@ -94,6 +95,7 @@ class EvaluationRunner:
         
         # Run agent
         response = await agent.chat(golden.input)
+        chain_of_thought, cleaned_response = separate_chain_of_thought(response)
         
         # Get tool calls
         tool_calls = [ToolCall(name=tool["tool_name"]) for tool in agent.provider.get_tool_calls_made()]
@@ -101,7 +103,7 @@ class EvaluationRunner:
         # Create test case
         test_case_params = {
             'input': golden.input,
-            'actual_output': response,
+            'actual_output': cleaned_response,
             'expected_output': golden.expected_output,
             'context': golden.context,
             'expected_tools': golden.expected_tools,
@@ -109,7 +111,8 @@ class EvaluationRunner:
             'additional_metadata': {
                 'agent_id': self.config.agent_id,
                 'expected_tool_names': [t.name for t in golden.expected_tools],
-                'actual_tool_names': [t.name for t in tool_calls]
+                'actual_tool_names': [t.name for t in tool_calls],
+                'chain_of_thought': chain_of_thought,
             }
         }
         
@@ -132,6 +135,8 @@ class EvaluationRunner:
                 'actual_output': test_result.get('actual_output', ''),
                 'expected_tools': metadata.get('expected_tool_names', []),
                 'actual_tools': metadata.get('actual_tool_names', []),
+                'chain_of_thought': metadata.get('chain_of_thought', ''),
+                'agent_id': metadata.get('agent_id', self.config.agent_id),
             }
             
             for metric in test_result['metrics_data']:

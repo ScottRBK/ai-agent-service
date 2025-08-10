@@ -256,6 +256,12 @@ class EvaluationViewer:
         st.markdown("##### 📤 Output")
         st.text_area("", first_row['actual_output'], height=100, key="detail_output", disabled=True)
         
+        # Chain of Thought section (only show if it exists)
+        chain_of_thought = first_row.get('chain_of_thought', '')
+        if chain_of_thought:
+            st.markdown("##### 🧠 Chain of Thought")
+            st.text_area("", chain_of_thought, height=150, key="detail_chain_of_thought", disabled=True)
+        
         # Tool Analysis section
         st.markdown("##### 🔧 Tool Analysis")
         expected_tools = set(first_row.get('expected_tools', []))
