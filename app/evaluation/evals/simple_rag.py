@@ -147,40 +147,30 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
             # Use the first available agent for cleanup (any agent can delete documents)
             cleanup_agent = list(test_agents.values())[0] if test_agents else None
             
-            # if cleanup_agent and cleanup_agent.knowledge_base:
-            #     for doc_id in created_document_ids:
-            #         try:
-            #             success = await cleanup_agent.knowledge_base.delete_document(doc_id)
-            #             if not success:
-            #                 logger.warning(f"Document {doc_id} may not have been deleted (returned False)")
-            #                 cleanup_failures += 1
-            #         except Exception as e:
-            #             logger.error(f"Failed to delete test document {doc_id}: {e}")
-            #             cleanup_failures += 1
+            if cleanup_agent and cleanup_agent.knowledge_base:
+                for doc_id in created_document_ids:
+                    try:
+                        success = await cleanup_agent.knowledge_base.delete_document(doc_id)
+                        if not success:
+                            logger.warning(f"Document {doc_id} may not have been deleted (returned False)")
+                            cleanup_failures += 1
+                    except Exception as e:
+                        logger.error(f"Failed to delete test document {doc_id}: {e}")
+                        cleanup_failures += 1
                 
-            #     if cleanup_failures > 0:
-            #         logger.warning(f"Failed to clean up {cleanup_failures} documents")
-            #     else:
-            #         logger.info("Successfully cleaned up all test documents")
-                
+                if cleanup_failures > 0:
+                    logger.warning(f"Failed to clean up {cleanup_failures} documents")
+                else:
+                    logger.info("Successfully cleaned up all test documents")
  
 
             if cleanup_agent and cleanup_agent.memory:
-                success = await cleanup_agent.memory.clear_session(
+                count = await cleanup_agent.memory.clear_session(
                     user_id=cleanup_agent.user_id,
                     session_id=cleanup_agent.session_id
                 )
-                if not success:
-                    logger.warning(f"Failed to clear memory session for user {cleanup_agent.user_id} and session {cleanup_agent.session_id}")
-                else:
-                    logger.info(f"Successfully cleared memory session for user {cleanup_agent.user_id} and session {cleanup_agent.session_id}")
-
-                
-
-            
-        
-        # Note: Agents don't have an explicit cleanup method
-        # Resources are cleaned up when the agent instance is garbage collected
+                logger.info(f"""Cleared {count} memory entries for user {cleanup_agent.user_id}, session 
+                    {cleanup_agent.session_id}""")
 
 
 def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
