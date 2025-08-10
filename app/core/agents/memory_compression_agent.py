@@ -285,7 +285,8 @@ Format your response EXACTLY as follows:
             # Store in knowledge base
             await knowledge_base_resource.ingest_document(
                 content=document_content,
-                namespace=f"conversations:{user_id}",  # Simplified namespace
+                user_id=user_id,
+                namespace_type="conversations",
                 doc_type=DocumentType.CONVERSATION,
                 source=f"session:{session_id}",
                 title=f"Conversation - {session_id} - {metadata.get('end_date', 'Unknown')}",

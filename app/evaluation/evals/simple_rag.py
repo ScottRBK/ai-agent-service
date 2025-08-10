@@ -199,16 +199,15 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
     synthesis_model = OllamaModel(model="qwen3:4b", temperature=0.7, base_url=settings.OLLAMA_BASE_URL)
     
     # Evaluation model - use CustomOllamaModel with JSON enforcement for metrics
-    evaluation_model = CustomOllamaModel(model="qwen3:4b", temperature=0.0, base_url=settings.OLLAMA_BASE_URL)
+    evaluation_model = CustomOllamaModel(model="qwen3:30b", temperature=0.0, base_url=settings.OLLAMA_BASE_URL)
     
     # Styling configuration for synthesizer
     styling_config = StylingConfig(
-        scenario="User asking questions about Project Stellaris and NebulaSoft technical discussions that require knowledge base searches",
+        scenario="User asking questions about Project Stellaris that require knowledge base searches",
         task="Generate queries that clearly indicate knowledge base operations about fictional technologies",
         input_format="""
         - Search queries: "What did Team Phoenix discuss about Quixel Token Protocol?", "Find information about DataHaven optimization", "Search for NebulaSoft architecture discussions"
-        - Cross-session queries: "Remind me what Team Aurora said about MeshLink Protocol", "What was our decision on ContainerFlux?", "Earlier we mentioned StreamPool configuration"
-        - Document listing: "Show my Project Stellaris conversations", "List all documents about NebulaSoft", "What topics have we covered for Team Phoenix?"
+        - Document listing: "Show my Project Stellaris conversations", "What topics have we covered for Team Phoenix?"
         """,
         expected_output_format="A helpful response using information retrieved from the knowledge base about Project Stellaris and NebulaSoft technologies"
     )
@@ -276,7 +275,7 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
         synthesizer_config=SynthesizerConfig(
             model=synthesis_model,  # Use smaller/faster model for synthesis
             styling_config=styling_config,
-            max_goldens_per_context=1  # Generate more test cases for comprehensive evaluation
+            max_goldens_per_context=10  # Generate more test cases for comprehensive evaluation
         ),
         metrics=metrics,
         contexts=contexts,
