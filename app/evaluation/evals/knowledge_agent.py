@@ -208,6 +208,14 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
                     logger.warning(f"Failed to clean up {cleanup_failures} documents")
                 else:
                     logger.info("Successfully cleaned up all test documents")
+
+            if cleanup_agent and cleanup_agent.memory:
+                for test_user_id in test_users:
+                    try:
+                        count = await cleanup_agent.memory.clear_all_sessions_for_user(test_user_id)
+                        logger.info(f"Cleared {count} memory entries for test user {test_user_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to clear memory for test user {test_user_id}: {e}")
         
         # Note: Agents don't have an explicit cleanup method
         # Resources are cleaned up when the agent instance is garbage collected

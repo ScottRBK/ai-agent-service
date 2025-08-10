@@ -330,6 +330,28 @@ class PostgreSQLMemoryResource(BaseResource):
         finally:
             db_session.close()
     
+    async def clear_all_sessions_for_user(self, user_id: str) -> int:
+        """Clear all memory sessions for a specific user."""
+        try:
+            db_session = self._get_session()
+            
+            count = db_session.query(MemoryEntryTable).filter(
+                MemoryEntryTable.user_id == user_id,
+                MemoryEntryTable.is_active == True
+            ).update({"is_active": False})
+            
+            db_session.commit()
+            await self.record_successful_call()
+            logger.info(f"Cleared {count} memory entries for user {user_id} (all sessions)")
+            return count
+            
+        except SQLAlchemyError as e:
+            db_session.rollback()
+            await self.record_failed_call(ResourceError(f"Database error: {e}", self.resource_id))
+            raise ResourceError(f"Failed to clear user sessions: {e}", self.resource_id)
+        finally:
+            db_session.close()
+    
     async def replace_memories_with_compressed(self, 
                                               user_id: str, 
                                               session_id: str, 

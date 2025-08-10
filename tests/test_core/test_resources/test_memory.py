@@ -263,6 +263,71 @@ class TestPostgreSQLMemoryResource:
             mock_session.commit.assert_called_once()
     
     @pytest.mark.asyncio
+    async def test_clear_all_sessions_for_user_success(self, memory_resource):
+        """Test successful clearing of all sessions for a user."""
+        mock_session = MagicMock()
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.update.return_value = 20  # 20 entries cleared across multiple sessions
+        
+        mock_session.query.return_value = mock_query
+        
+        with patch.object(memory_resource, '_get_session') as mock_get_session:
+            mock_get_session.return_value = mock_session
+            
+            with patch.object(memory_resource, 'record_successful_call') as mock_record:
+                result = await memory_resource.clear_all_sessions_for_user("user123")
+                
+                assert result == 20
+                mock_session.commit.assert_called_once()
+                mock_record.assert_called_once()
+                # Verify the update was called with is_active = False
+                mock_query.update.assert_called_once_with({"is_active": False})
+    
+    @pytest.mark.asyncio
+    async def test_clear_all_sessions_for_user_no_entries(self, memory_resource):
+        """Test clearing all sessions when no entries exist."""
+        mock_session = MagicMock()
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.update.return_value = 0  # No entries to clear
+        
+        mock_session.query.return_value = mock_query
+        
+        with patch.object(memory_resource, '_get_session') as mock_get_session:
+            mock_get_session.return_value = mock_session
+            
+            with patch.object(memory_resource, 'record_successful_call') as mock_record:
+                result = await memory_resource.clear_all_sessions_for_user("nonexistent_user")
+                
+                assert result == 0
+                mock_session.commit.assert_called_once()
+                mock_record.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_clear_all_sessions_for_user_database_error(self, memory_resource):
+        """Test clearing all sessions with database error."""
+        from sqlalchemy.exc import SQLAlchemyError
+        
+        mock_session = MagicMock()
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.update.side_effect = SQLAlchemyError("Database error")
+        
+        mock_session.query.return_value = mock_query
+        
+        with patch.object(memory_resource, '_get_session') as mock_get_session:
+            mock_get_session.return_value = mock_session
+            
+            with patch.object(memory_resource, 'record_failed_call') as mock_record_failed:
+                with pytest.raises(ResourceError, match="Failed to clear user sessions"):
+                    await memory_resource.clear_all_sessions_for_user("user123")
+                
+                mock_session.rollback.assert_called_once()
+                mock_session.close.assert_called_once()
+                mock_record_failed.assert_called_once()
+    
+    @pytest.mark.asyncio
     async def test_cleanup(self, memory_resource):
         """Test resource cleanup."""
         memory_resource.engine = MagicMock()

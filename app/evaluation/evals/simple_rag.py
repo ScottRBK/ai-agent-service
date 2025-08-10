@@ -163,14 +163,13 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
                 else:
                     logger.info("Successfully cleaned up all test documents")
  
-
             if cleanup_agent and cleanup_agent.memory:
-                count = await cleanup_agent.memory.clear_session(
-                    user_id=cleanup_agent.user_id,
-                    session_id=cleanup_agent.session_id
-                )
-                logger.info(f"""Cleared {count} memory entries for user {cleanup_agent.user_id}, session 
-                    {cleanup_agent.session_id}""")
+                for test_user_id in test_users:
+                    try:
+                        count = await cleanup_agent.memory.clear_all_sessions_for_user(test_user_id)
+                        logger.info(f"Cleared {count} memory entries for test user {test_user_id}")
+                    except Exception as e:
+                        logger.error(f"Failed to clear memory for test user {test_user_id}: {e}")
 
 
 def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
