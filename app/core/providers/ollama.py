@@ -101,16 +101,10 @@ class OllamaProvider(BaseProvider):
                     },
                 }],
             })
-            try:
-                tool_result = await self.execute_tool_call(tool_call.function.name, tool_call.function.arguments, agent_id)
-                result_payload = str(tool_result)
-            except Exception as e:
-                logger.error(f"OllamaProvider - tool execution error for {tool_call.function.name}: {e}")
-                result_payload = json.dumps({
-                    "error": str(e),
-                    "tool": tool_call.function.name,
-                    "arguments": tool_call.function.arguments
-                })
+
+            tool_result = await self.execute_tool_call(tool_call.function.name, tool_call.function.arguments, agent_id)
+            result_payload = str(tool_result)
+
             messages.append({
                 "role": "tool",
                 "content": str(result_payload)

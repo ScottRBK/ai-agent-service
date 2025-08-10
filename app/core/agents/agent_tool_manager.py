@@ -329,17 +329,14 @@ class AgentToolManager:
         else:
             raise ValueError(f"MCP server {mcp_server_label} has no server_url or command")
         
-        try:
-            async with client:
-                logger.info(f"Executing MCP tool {actual_tool_name} with arguments {arguments}")
-                result = await client.call_tool(actual_tool_name, arguments)
-                await client.close()
-                logger.info(f"MCP tool {actual_tool_name} executed successfully")
-                return str(result)
-        except Exception as e:
-            # Return the error message as a string so the LLM can see it
-            logger.error(f"Error executing MCP tool {tool_name}: {e}")
-            return f"Tool execution failed: {str(e)}"
+
+        async with client:
+            logger.info(f"Executing MCP tool {actual_tool_name} with arguments {arguments}")
+            result = await client.call_tool(actual_tool_name, arguments)
+            await client.close()
+            logger.info(f"MCP tool {actual_tool_name} executed successfully")
+            return str(result)
+
     
     def clear_cache(self):
         """Clear all cached data."""

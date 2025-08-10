@@ -568,11 +568,9 @@ class TestAgentToolManager:
                     mock_client.__aenter__.return_value = mock_client
                     mock_client.__aexit__.return_value = None
                     
-                    # Test that the method handles communication errors
-                    result = await agent_manager.execute_mcp_tool("searxng__searxng_web_search", {"query": "test"})
-                    
-                    # Should return error message as string
-                    assert "Tool execution failed: Communication failed" in result
+                    # Test that the method raises communication errors (for BaseProvider to handle)
+                    with pytest.raises(Exception, match="Communication failed"):
+                        await agent_manager.execute_mcp_tool("searxng__searxng_web_search", {"query": "test"})
 
     def test_mcp_model_command_based_server_validation(self):
         """Test that MCP model correctly validates command-based server configurations."""

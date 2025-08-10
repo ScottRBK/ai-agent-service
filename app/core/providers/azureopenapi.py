@@ -97,15 +97,9 @@ class AzureOpenAIProvider(BaseProvider):
                 context.append({"type": "function_call_output", "call_id": tool_call.call_id, "output": error_result})
                 continue
 
-            try:
-                result = await self.execute_tool_call(tool_call.name, arguments, agent_id)
-                context.append({"type": "function_call_output", "call_id": tool_call.call_id, "output": str(result)})
-                logger.debug(f"AzureOpenAIProvider - tool call result: {result}")
-                tool_count += 1
-            except Exception as e:
-                logger.error(f"AzureOpenAIProvider - tool execution failed for {tool_call.name}: {e}")
-                error_result = f"Error: Tool execution failed - {str(e)}"
-                context.append({"type": "function_call_output", "call_id": tool_call.call_id, "output": error_result})
+            result = await self.execute_tool_call(tool_call.name, arguments, agent_id)
+            context.append({"type": "function_call_output", "call_id": tool_call.call_id, "output": str(result)})
+            tool_count += 1
         
         return tool_count
 

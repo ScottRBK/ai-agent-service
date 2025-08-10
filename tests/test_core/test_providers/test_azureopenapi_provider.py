@@ -467,7 +467,8 @@ class TestErrorHandling:
         """AC8: Tool Execution Failures - graceful handling"""
         # Arrange
         mock_provider.client = mock_azure_client
-        mock_provider.execute_tool_call = AsyncMock(side_effect=Exception("Tool execution failed"))
+        # With centralized error handling, execute_tool_call returns error string instead of raising
+        mock_provider.execute_tool_call = AsyncMock(return_value="Error executing tool failing_tool: Tool execution failed")
         
         async def mock_stream_with_tool_error():
             yield Mock(type="response.output_text.delta", delta="I'll help")
@@ -1020,17 +1021,18 @@ class TestExecuteToolCalls:
         tool_call.name = "failing_tool"
         tool_calls = [tool_call]
         agent_id = "test_agent"
-        mock_provider.execute_tool_call = AsyncMock(side_effect=Exception("Tool failed"))
+        # With centralized error handling, execute_tool_call returns error string instead of raising
+        mock_provider.execute_tool_call = AsyncMock(return_value="Error executing tool failing_tool: Tool failed")
         
         # Act
         tool_count = await mock_provider._execute_tool_calls(context, tool_calls, agent_id)
         
         # Assert
-        assert tool_count == 0
+        assert tool_count == 1  # Tool was executed (even though it returned an error)
         assert len(context) == 1
         assert context[0]["type"] == "function_call_output"
         assert context[0]["call_id"] == "call_123"
-        assert "Error: Tool execution failed" in context[0]["output"]
+        assert "Error executing tool failing_tool: Tool failed" in context[0]["output"]
 
     @pytest.mark.asyncio
     async def test_execute_tool_calls_empty_list(self, mock_provider):

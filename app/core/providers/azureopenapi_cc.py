@@ -150,19 +150,17 @@ class AzureOpenAIProviderCC(BaseProvider):
                     }]
                 })             
                 
-                try:
-                    tool_result = await self.execute_tool_call(tool_call["name"], args, agent_id)
-                    logger.info(f"Tool result: {str(tool_result)}")
 
-                    messages.append({       
-                        "role": "tool",
-                        "content": str(tool_result),
-                        "tool_call_id": tool_call["id"]
-                    })
-                    tool_count += 1
-                except Exception as e:
-                    logger.error(f"AzureOpenAIProviderCC - _execute_tool_calls - error executing tool call: {e}")
-                    continue
+                tool_result = await self.execute_tool_call(tool_call["name"], args, agent_id)
+                logger.info(f"Tool result: {str(tool_result)}")
+
+                messages.append({       
+                    "role": "tool",
+                    "content": str(tool_result),
+                    "tool_call_id": tool_call["id"]
+                })
+                tool_count += 1
+
 
         return tool_count
 

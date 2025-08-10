@@ -265,13 +265,14 @@ class TestBaseProviderAgentContext:
         with patch('app.core.providers.base.AgentToolManager') as mock_manager_class:
             mock_manager_class.return_value = mock_agent_manager
             
-            # Should propagate the exception
-            with pytest.raises(Exception, match="Tool execution failed"):
-                await provider.execute_tool_call(
-                    "test_tool", 
-                    {"param": "value"}, 
-                    agent_id="test_agent"
-                )
+            # Should return error string instead of raising exception (centralized error handling)
+            result = await provider.execute_tool_call(
+                "test_tool", 
+                {"param": "value"}, 
+                agent_id="test_agent"
+            )
+            
+            assert "Error executing tool test_tool: Tool execution failed" in result
 
 
 class TestBaseProviderReranking:

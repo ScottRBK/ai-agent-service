@@ -28,12 +28,11 @@ class DateTool:
         Returns:
             The current date and time in the given timezone in the format YYYY-MM-DD HH:MM:SS
         """
-        try:
-            # Convert string to timezone object
-            tz = zoneinfo.ZoneInfo(timezone)
-            return datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-        except Exception as e:
-            return f"Error: Invalid timezone '{timezone}'. Please use a valid timezone name like 'Asia/Tokyo' or 'UTC'."
+
+        # Convert string to timezone object
+        tz = zoneinfo.ZoneInfo(timezone)
+        return datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+
     
 
 

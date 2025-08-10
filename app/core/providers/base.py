@@ -148,7 +148,13 @@ class BaseProvider(ABC):
             agent_ctx = agent_instance or self.agent_instance
             agent_manager = AgentToolManager(agent_id, agent_instance=agent_ctx)
 
-            result = await agent_manager.execute_tool(tool_name, arguments)
+            try:
+
+                result = await agent_manager.execute_tool(tool_name, arguments)
+                logger.debug(f"BaseProvider - - execute_tool_call -  tool results: {result}")
+            except Exception as e:
+                logger.error(f"BaseProvider - - execute_tool_call -  error executing tool {tool_name}: {str(e)}")
+                result = f"Error executing tool {tool_name}: {str(e)}"
 
             if self.config.track_tool_calls:
 
