@@ -180,6 +180,7 @@ class TestBaseProviderAgentContext:
             assert len(provider.tool_calls_made) == 1
             assert provider.tool_calls_made[0]["tool_name"] == "test_tool"
             assert provider.tool_calls_made[0]["arguments"] == {"param": "value"}
+            assert provider.tool_calls_made[0]["results"] == "tool result"
     
     @pytest.mark.asyncio
     async def test_execute_tool_call_without_tool_tracking(self, mock_config, mock_agent):

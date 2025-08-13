@@ -6,8 +6,9 @@ from app.core.resources.knowledge_base import KnowledgeBaseResource
 # Search Knowledge Base Tool
 class SearchKnowledgeBaseParams(BaseModel):
     query: str = Field(description="The search query")
-    search_type: str = Field(default="all", description="Type of content to search: conversations, documents, or all")
-    limit: int = Field(default=5, description="Maximum number of results", ge=1, le=20)
+    search_type: str = Field(default="all", description="""Type of content to search: conversations, 
+                             documents, or all""")
+    limit: int = Field(default=15, description="Maximum number of results", ge=1, le=20)
 
 @register_tool(
     name="search_knowledge_base",
@@ -17,7 +18,7 @@ class SearchKnowledgeBaseParams(BaseModel):
     params_model=SearchKnowledgeBaseParams
 )
 async def search_knowledge_base(agent_context: Any, query: str, 
-                              search_type: str = "all", limit: int = 5) -> str:
+                              search_type: str = "all", limit: int = 15) -> str:
     """Execute knowledge base search"""
 
     # Validate knowledge base access
@@ -36,7 +37,8 @@ async def search_knowledge_base(agent_context: Any, query: str,
         query=query,
         namespace_types=namespace_types,
         limit=limit,
-        use_reranking=True
+        use_reranking=True,
+        user_id=user_id
     )
     
     if not results:
@@ -75,39 +77,17 @@ async def list_documents(agent_context: Any, doc_type: str = "all", limit: int =
     if not hasattr(agent_context, 'knowledge_base') or not agent_context.knowledge_base:
         return "Knowledge base not available for this agent"
     
-    kb = agent_context.knowledge_base
+    kb: KnowledgeBaseResource = agent_context.knowledge_base
     user_id = agent_context.user_id
-    
-    # Determine namespace based on doc type
-    if doc_type == "conversations":
-        namespace = f"conversations:{user_id}"
-    elif doc_type == "documents":
-        namespace = f"documents:{user_id}"
+
+    if doc_type == "all": 
+        namespace_types = ["conversations", "documents"]
     else:
-        # For "all", we need to list from both namespaces
-        docs_conv = await kb.list_documents(f"conversations:{user_id}")
-        docs_user = await kb.list_documents(f"documents:{user_id}")
-        documents = docs_conv + docs_user
-        documents.sort(key=lambda x: x.created_at, reverse=True)
-        documents = documents[:limit]
-        
-        if not documents:
-            return "No documents found in knowledge base"
-        
-        # Format combined list
-        formatted_docs = []
-        for i, doc in enumerate(documents, 1):
-            formatted_docs.append(
-                f"{i}. {doc.title or 'Untitled'} ({doc.doc_type})\n"
-                f"   Created: {doc.created_at}\n"
-                f"   Namespace: {doc.namespace}"
-            )
-        
-        return f"All documents:\n\n" + "\n\n".join(formatted_docs)
-    
-    # Single namespace query
-    documents = await kb.list_documents(namespace)
-    
+        namespace_types = [doc_type]
+    documents = []
+    for namespace_type in namespace_types:
+        documents.extend(await kb.list_documents(user_id=user_id, namespace_types=namespace_type))
+
     if not documents:
         return f"No {doc_type} found"
     

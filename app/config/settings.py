@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     MCP_CONFIG_PATH: str = "mcp.json"
     PROMPTS_DIR_PATH: str = "prompts"
     EVALUATION_OUTPUT_DIR: str = "evaluations/output"
+    EVALUATION_INPUT_DIR: str = "evaluations/input"
 
     # AZURE OpenAI Configuration
     AZURE_OPENAI_BASE_URL: str = "https://{your-custom-endpoint}.openai.azure.com/"

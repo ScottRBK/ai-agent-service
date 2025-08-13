@@ -405,6 +405,32 @@ class PGVectorProvider(VectorStoreProvider):
         finally:
             session.close()
 
+    async def delete_all_documents_for_user(self, user_id: str) -> bool:
+        """Delete all documents for a user."""
+        try:
+            session = self._get_session()
+            
+            logger.info(f"PGVectorProvider deleting all documents for user {user_id}")
+            # First delete all chunks for the user
+            session.query(ChunkTable).filter(
+                ChunkTable.user_id == user_id
+            ).delete()
+            
+            # Then delete all documents for the user
+            session.query(DocumentTable).filter(
+                DocumentTable.user_id == user_id
+            ).delete()
+            
+            session.commit()
+            logger.info(f"All documents deleted for user {user_id}")
+            return True
+        except SQLAlchemyError as e:
+            session.rollback()
+            logger.error(f"Failed to delete all documents for user: {e}")
+            raise
+        finally:
+            session.close()
+    
     async def list_documents(self, user_id: str, namespace_type: str, embedding_model: str) -> List[Document]:
         """List documents for a user in a specific namespace type and embedding model."""
         try:

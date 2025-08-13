@@ -114,7 +114,6 @@ class PostgreSQLMemoryResource(BaseResource):
             raise ResourceError("Resource not initialized", self.resource_id)
         return self.SessionLocal()
     
-    
     async def store_memory(self, memory_entry: MemoryEntry) -> str:
         """Store a memory entry."""
         try:

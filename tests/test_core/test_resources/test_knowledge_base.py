@@ -51,6 +51,7 @@ class TestKnowledgeBaseResource:
         provider.get_document = AsyncMock()
         provider.list_documents = AsyncMock()
         provider.delete_document = AsyncMock(return_value=True)
+        provider.delete_all_documents_for_user = AsyncMock(return_value=True)
         return provider
     
     @pytest.fixture
@@ -497,11 +498,9 @@ class TestKnowledgeBaseResource:
         knowledge_base_resource.set_embedding_provider(mock_embedding_provider, "text-embedding-ada-002")
         mock_embedding_provider.embed.side_effect = Exception("Embedding failed")
         
-        with patch.object(knowledge_base_resource, 'record_failed_call') as mock_record_failed:
-            with pytest.raises(ResourceError, match="Search failed"):
-                await knowledge_base_resource.search(query="test query")
-            
-            mock_record_failed.assert_called_once()
+        # The search method no longer wraps exceptions, so we expect the original exception
+        with pytest.raises(Exception, match="Embedding failed"):
+            await knowledge_base_resource.search(query="test query")
 
     # Reranking Tests
     
@@ -648,6 +647,41 @@ class TestKnowledgeBaseResource:
         with patch.object(knowledge_base_resource, 'record_failed_call') as mock_record_failed:
             with pytest.raises(ResourceError, match="Failed to delete document"):
                 await knowledge_base_resource.delete_document("doc-123")
+            
+            mock_record_failed.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_delete_all_documents_for_user_success(self, knowledge_base_resource, mock_vector_provider):
+        """Test successful deletion of all documents for a user."""
+        knowledge_base_resource.vector_provider = mock_vector_provider
+        mock_vector_provider.delete_all_documents_for_user.return_value = True
+        
+        with patch.object(knowledge_base_resource, 'record_successful_call') as mock_record:
+            result = await knowledge_base_resource.delete_all_documents_for_user("test_user")
+            
+            assert result is True
+            mock_vector_provider.delete_all_documents_for_user.assert_called_once_with("test_user")
+            mock_record.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_delete_all_documents_for_user_no_documents(self, knowledge_base_resource, mock_vector_provider):
+        """Test deletion when user has no documents."""
+        knowledge_base_resource.vector_provider = mock_vector_provider
+        mock_vector_provider.delete_all_documents_for_user.return_value = False
+        
+        result = await knowledge_base_resource.delete_all_documents_for_user("nonexistent_user")
+        
+        assert result is False
+    
+    @pytest.mark.asyncio
+    async def test_delete_all_documents_for_user_failure(self, knowledge_base_resource, mock_vector_provider):
+        """Test deletion failure with vector provider exception."""
+        knowledge_base_resource.vector_provider = mock_vector_provider
+        mock_vector_provider.delete_all_documents_for_user.side_effect = Exception("Database error")
+        
+        with patch.object(knowledge_base_resource, 'record_failed_call') as mock_record_failed:
+            with pytest.raises(ResourceError, match="Failed to delete all documents for user"):
+                await knowledge_base_resource.delete_all_documents_for_user("test_user")
             
             mock_record_failed.assert_called_once()
 

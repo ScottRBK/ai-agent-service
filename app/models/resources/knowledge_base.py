@@ -17,6 +17,7 @@ class DocumentType(str, Enum):
     WEB = "web"
     CONVERSATION = "conversation"
     MARKDOWN = "markdown"
+    CODE = "code"
 
 
 class NamespaceInfo(BaseModel):

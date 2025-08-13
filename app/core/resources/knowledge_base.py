@@ -115,7 +115,6 @@ class KnowledgeBaseResource(BaseResource):
             from app.core.resources.chunking.simple import SimpleChunkingStrategy
             return SimpleChunkingStrategy()
         
-
     async def ingest_document(self, 
                             content: str,
                             user_id: str,
@@ -127,15 +126,12 @@ class KnowledgeBaseResource(BaseResource):
                             namespace_qualifier: Optional[str] = None) -> str:
         """Ingest a document into the knowledge base."""
         try:
-            # Generate UUID for the document
             import uuid
             document_id = str(uuid.uuid4())
             
-            # Ensure embedding model is set
             if not self.embedding_model:
                 raise ResourceError("No embedding model configured", self.resource_id)
-            
-            # Store the document with structured namespace
+
             document = Document(
                 id=document_id,
                 user_id=user_id,
@@ -151,16 +147,14 @@ class KnowledgeBaseResource(BaseResource):
             
             await self.vector_provider.store_document(document)
             
-            # Chunk the content using document-type-specific strategy
             text_chunks = self._chunk_text(content, doc_type)
-            
-            # Generate embeddings and create chunks
+
             chunks = []
             for i, chunk_text in enumerate(text_chunks):
                 embedding = await self._generate_embedding(chunk_text)
                 
                 chunk = DocumentChunk(
-                    id=str(uuid.uuid4()),  # Generate UUID for each chunk
+                    id=str(uuid.uuid4()), 
                     document_id=document_id,
                     user_id=user_id,
                     namespace_type=namespace_type,
@@ -173,7 +167,6 @@ class KnowledgeBaseResource(BaseResource):
                 )
                 chunks.append(chunk)
             
-            # Store chunks
             await self.vector_provider.store_chunks(chunks)
             
             await self.record_successful_call()
@@ -189,47 +182,42 @@ class KnowledgeBaseResource(BaseResource):
                     user_id: Optional[str] = None,
                     namespace_types: Optional[List[str]] = None,
                     doc_types: Optional[List[DocumentType]] = None,
-                    limit: int = 10,
+                    limit: int = 15,
                     use_reranking: bool = True) -> List[SearchResult]:
         """Search for relevant content with optional two-stage retrieval."""
-        try:
-            # Generate query embedding
-            query_embedding = await self._generate_embedding(query)
-            
-            # Ensure embedding model is set for filtering
-            if not self.embedding_model:
-                raise ResourceError("No embedding model configured", self.resource_id)
-            
-            # Determine search limit based on reranking
-            search_limit = limit
-            if use_reranking and self.rerank_provider and self.rerank_model:
-                # Use larger limit for first stage, then rerank to final limit
-                search_limit = max(limit, self.rerank_limit)
-            
-            # Create search filters with structured namespace
-            filters = SearchFilters(
-                user_id=user_id,
-                namespace_types=namespace_types,
-                doc_types=doc_types,
-                embedding_model=self.embedding_model,
-                limit=search_limit
-            )
-            logger.debug(f"KnowledgeBase - search - filters: {filters}")
-            # Stage 1: Vector similarity search
-            results = await self.vector_provider.search_similar(query_embedding, filters)
-            logger.debug(f"KnowledgeBase - search - initial results: {len(results)} found")
+        # Generate query embedding
+        query_embedding = await self._generate_embedding(query)
+        
+        # Ensure embedding model is set for filtering
+        if not self.embedding_model:
+            raise ResourceError("No embedding model configured", self.resource_id)
+        
+        # Determine search limit based on reranking
+        search_limit = limit
+        if use_reranking and self.rerank_provider and self.rerank_model:
+            # Use larger limit for first stage, then rerank to final limit
+            search_limit = max(limit, self.rerank_limit)
+        
+        # Create search filters with structured namespace
+        filters = SearchFilters(
+            user_id=user_id,
+            namespace_types=namespace_types,
+            doc_types=doc_types,
+            embedding_model=self.embedding_model,
+            limit=search_limit
+        )
+        logger.debug(f"KnowledgeBase - search - filters: {filters}")
+        # Stage 1: Vector similarity search
+        results = await self.vector_provider.search_similar(query_embedding, filters)
+        logger.debug(f"KnowledgeBase - search - initial results: {len(results)} found")
 
-            
-            # Stage 2: Optional reranking
-            if use_reranking and self.rerank_provider and self.rerank_model and len(results) > limit:
-                results = await self._rerank_results(query, results, limit)
-            
-            await self.record_successful_call()
-            return results
-            
-        except Exception as e:
-            await self.record_failed_call(ResourceError(f"Search failed: {e}", self.resource_id))
-            raise ResourceError(f"Search failed: {e}", self.resource_id)
+        
+        # Stage 2: Optional reranking
+        if use_reranking and self.rerank_provider and self.rerank_model and len(results) > limit:
+            results = await self._rerank_results(query, results, limit)
+        
+        await self.record_successful_call()
+        return results  
 
     async def _rerank_results(self, query: str, results: List[SearchResult], final_limit: int) -> List[SearchResult]:
         """Rerank search results using the configured rerank provider."""
@@ -268,7 +256,6 @@ class KnowledgeBaseResource(BaseResource):
     async def list_documents(self, user_id: str, namespace_type: str) -> List[Document]:
         """List documents in a namespace."""
         try:
-            # Ensure embedding model is set
             if not self.embedding_model:
                 raise ResourceError("No embedding model configured", self.resource_id)
             
@@ -288,3 +275,13 @@ class KnowledgeBaseResource(BaseResource):
         except Exception as e:
             await self.record_failed_call(ResourceError(f"Delete document failed: {e}", self.resource_id))
             raise ResourceError(f"Failed to delete document: {e}", self.resource_id)
+        
+    async def delete_all_documents_for_user(self, user_id: str) -> bool:
+        """Delete all documents for a specific user."""
+        try:
+            result = await self.vector_provider.delete_all_documents_for_user(user_id)
+            await self.record_successful_call()
+            return result
+        except Exception as e:
+            await self.record_failed_call(ResourceError(f"Deleted all documents for user failed: {e}", self.resource_id))
+            raise ResourceError(f"Failed to delete all documents for user: {e}", self.resource_id)

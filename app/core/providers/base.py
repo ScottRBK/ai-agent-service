@@ -160,7 +160,8 @@ class BaseProvider(ABC):
 
                 self.tool_calls_made.append({
                     "tool_name": tool_name,
-                    "arguments": arguments
+                    "arguments": arguments,
+                    "results": result
                 })
                 
             return result

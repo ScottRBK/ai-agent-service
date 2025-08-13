@@ -13,9 +13,11 @@ from pathlib import Path
 from datetime import datetime
 
 from .dataset import GoldenDataset
-from .config import EvaluationConfig
+from .config import EvaluationConfig, GoldenGenerationType
 from .evaluation_utils import EvaluationUtils
+from .document_processor import DocumentProcessor
 from app.config.settings import settings
+from app.utils.logging import logger
 
 class EvaluationRunner:
     """Runs evaluations for agents"""
@@ -25,20 +27,82 @@ class EvaluationRunner:
         self.results_cache = {}
         self.dataset = GoldenDataset(config.dataset_name)
         self._setup_output_directories()
+        self.generated_user_id = f"test_user_{uuid.uuid4()}"
     
-    async def generate_goldens(self) -> None:
+    async def generate_goldens(self) -> str:
         """Generate golden test cases from contexts"""
-        await self.dataset.generate_from_contexts(
-            self.config.contexts,
-            {
-                "model": self.config.synthesizer_config.model,
-                "styling_config": self.config.synthesizer_config.styling_config
-            },
-            self.config.synthesizer_config.max_goldens_per_context
+
+        if self.config.golden_generation_type == GoldenGenerationType.CONTEXT:
+
+            await self.dataset.generate_from_contexts(
+                self.config.contexts,
+                {
+                    "model": self.config.synthesizer_config.model,
+                    "styling_config": self.config.synthesizer_config.styling_config
+                },
+                self.config.synthesizer_config.max_goldens_per_context
+            )
+        elif self.config.golden_generation_type == GoldenGenerationType.DOCUMENT:
+
+            if self.config.persist_to_kb:
+                test_user_id = await self.persist_documents_to_knowledge_base(
+                    document_paths=self.config.document_paths)
+            
+            await self.dataset.generate_from_documents(
+            document_paths=self.config.document_paths,
+            synthesizer_config={
+                    "model": self.config.synthesizer_config.model,
+                    "styling_config": self.config.synthesizer_config.styling_config
+                },
+            max_goldens_per_context=self.config.max_goldens_per_context,
+            document_metadata=self.config.document_metadata,
+            default_tools=self.config.default_tools,
+            parse_frontmatter=self.config.parse_frontmatter,
+            user_id=self.generated_user_id
         )
+            
         golden_path = self._get_golden_path(self.config.dataset_file)
         self.dataset.save(str(golden_path))
-        print(f"Saved {len(self.dataset.goldens)} goldens to {golden_path}")
+        logger.info(f"Saved {len(self.dataset.goldens)} goldens to {golden_path}")
+    
+    async def persist_documents_to_knowledge_base(self, document_paths: Optional[List[str]] = None, 
+                                                  store_metadata: bool = False) -> str:
+        """Persist documents to knowledge base"""
+
+        agent = CLIAgent(self.config.agent_id)
+        agent.user_id = self.generated_user_id
+        agent.session_id = f"test_session_{uuid.uuid4()}"
+        await agent.initialize()
+        
+        if agent.knowledge_base:
+            logger.info("Evaluation Runner - Persisting documents to knowledge base")
+            for path in document_paths:
+                content = DocumentProcessor.load_document(path)
+                doc_type = DocumentProcessor.detect_type(path)
+
+                metadata, cleaned_content = DocumentProcessor.parse_metadata(content, doc_type)
+                
+                await agent.knowledge_base.ingest_document(
+                    content=cleaned_content,
+                    user_id=agent.user_id,
+                    namespace_type="documents",
+                    doc_type=doc_type,
+                    source=path,
+                    title=Path(path).name,
+                    metadata=metadata if store_metadata else {}
+                )
+                logger.info(f"  Ingested: {path}")
+        else: 
+            logger.warning("""Evaluation Runner - No knowledge base available for this agent, 
+                           skipping document persistence""")
+           
+   
+    def _get_synthesizer_config(self) -> Dict:
+        """Get synthesizer configuration from evaluation config"""
+        return {
+            "model": self.config.synthesizer_config.model,
+            "styling_config": self.config.synthesizer_config.styling_config
+        }
     
     def load_goldens(self) -> None:
         """Load golden test cases from file"""
@@ -58,6 +122,17 @@ class EvaluationRunner:
         
         # Run evaluation (suppress output)
         print("\nEvaluating...")
+        
+        if not test_cases:
+            print("""No test cases to evaluate. 
+                  Please generate golden test cases first using --generate flag.""")
+            return {
+                "dataframe": None,
+                "raw_results": None,
+                "summary": {"error": """No test cases available. 
+                            Please generate golden test cases first using --generate flag."""}
+            }
+        
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             results = evaluate(test_cases=test_cases, metrics=self.config.metrics)
         print("Evaluation complete")
@@ -76,7 +151,28 @@ class EvaluationRunner:
             'dataframe': df,
             'summary': self._create_summary(df)
         }
-    
+
+    async def _process_tool_calls(self, tool_calls) -> List[ToolCall]:
+        """Process tool calls to generate a list of ToolCall objects"""
+        evaluation_tool_calls = []
+        retrieval_context = []
+        for tool_call in tool_calls:
+
+            tc = ToolCall(name=tool_call["tool_name"], 
+                            input_parameters=tool_call.get("parameters", {}), 
+                            output=tool_call.get("results", None))
+            
+            evaluation_tool_calls.append(tc)
+            if tc.name in ["search_knowledge_base", 
+                           "list_documents"] and tc.output is not None:
+                retrieval_context.append(tc.output)
+       
+        logger.debug(f"""Evaluation Runner - process tool calls:
+                    \n tool_calls: {evaluation_tool_calls} 
+                    \n retrieval_context: {retrieval_context} """)
+            
+        return evaluation_tool_calls, retrieval_context
+
     async def _create_test_case(self, golden) -> LLMTestCase:
         """Create a test case by running the agent"""
         #TODO: Use the agent factory to get the agent
@@ -84,7 +180,7 @@ class EvaluationRunner:
         
         # Use context-specific IDs from additional_metadata if available, otherwise generate new ones
         if hasattr(golden, 'additional_metadata') and golden.additional_metadata:
-            agent.user_id = golden.additional_metadata.get('user_id', f"test_user_{uuid.uuid4()}")
+            agent.user_id = golden.additional_metadata.get('user_id', self.generated_user_id)
             agent.session_id = golden.additional_metadata.get('session_id', str(uuid.uuid4()))
         else:
             agent.user_id = f"test_user_{uuid.uuid4()}"
@@ -93,14 +189,21 @@ class EvaluationRunner:
         await agent.initialize()    
         agent.provider.config.track_tool_calls = True
         
-        # Run agent
         response = await agent.chat(golden.input)
         chain_of_thought, cleaned_response = separate_chain_of_thought(response)
         
-        # Get tool calls
-        tool_calls = [ToolCall(name=tool["tool_name"]) for tool in agent.provider.get_tool_calls_made()]
-        
-        # Create test case
+        agent_tool_calls = agent.provider.get_tool_calls_made()
+        tool_calls, retrieval_context_from_tools = await self._process_tool_calls(agent_tool_calls)
+
+        # Use golden's retrieval_context if it exists, otherwise use from tool calls
+        logger.info(f"Evaluation Runner - Create Test Case - {golden.retrieval_context}")
+        if hasattr(golden, 'retrieval_context') and golden.retrieval_context:
+            retrieval_context = golden.retrieval_context
+        else:
+            retrieval_context = retrieval_context_from_tools
+
+        logger.debug(f"Evaluation Runner - Create Test Case - Retrieval context: {retrieval_context}")
+
         test_case_params = {
             'input': golden.input,
             'actual_output': cleaned_response,
@@ -108,6 +211,7 @@ class EvaluationRunner:
             'context': golden.context,
             'expected_tools': golden.expected_tools,
             'tools_called': tool_calls,
+            'retrieval_context': retrieval_context,
             'additional_metadata': {
                 'agent_id': self.config.agent_id,
                 'expected_tool_names': [t.name for t in golden.expected_tools],
@@ -116,9 +220,6 @@ class EvaluationRunner:
             }
         }
         
-        # Add retrieval_context if present (for RAG metrics)
-        if hasattr(golden, 'retrieval_context') and golden.retrieval_context:
-            test_case_params['retrieval_context'] = golden.retrieval_context
         
         return LLMTestCase(**test_case_params)
     
@@ -172,8 +273,16 @@ class EvaluationRunner:
             print("No evaluation results to display. Run evaluation first.")
             return
             
-        df = self._last_results['dataframe']
-        raw_results = self._last_results['raw_results']
+        df = self._last_results.get('dataframe')
+        raw_results = self._last_results.get('raw_results')
+        
+        # Handle case where no test cases were available
+        if df is None or raw_results is None:
+            if self._last_results.get('summary', {}).get('error'):
+                print(f"\n{self._last_results['summary']['error']}")
+            else:
+                print("\nNo evaluation results available.")
+            return
         
         if verbose:
             EvaluationUtils.print_evaluation_summary_verbose(df)

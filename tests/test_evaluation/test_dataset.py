@@ -85,13 +85,11 @@ class TestGoldenDataset:
     @pytest.fixture
     def sample_synthesizer_config(self):
         """Create sample synthesizer configuration"""
-        from deepeval.synthesizer.config import StylingConfig
+        # Create mock that will pass the model type checking
+        mock_model = MagicMock()
+        mock_model.__class__.__name__ = "GPTModel"
         return {
-            "model": MagicMock(),
-            "styling_config": StylingConfig(
-                scenario="Test scenario",
-                task="Test task"
-            )
+            "model": mock_model
         }
 
     @pytest.mark.asyncio
@@ -846,3 +844,351 @@ class TestGoldenDataset:
         
         # Note: retrieval_context is not included in basic to_dataframe since it's 
         # only used during evaluation, not for dataset analysis
+
+    # Tests for generate_from_documents method
+    @pytest.mark.asyncio
+    async def test_generate_from_documents_basic_flow(self, sample_synthesizer_config):
+        """Test basic document generation flow with mock documents"""
+        document_paths = ["/path/to/doc1.md", "/path/to/doc2.md"]
+        
+        mock_synthesizer = AsyncMock()
+        mock_golden_1 = MagicMock()
+        mock_golden_1.input = "Question from doc1"
+        mock_golden_1.expected_tools = []
+        
+        mock_golden_2 = MagicMock()
+        mock_golden_2.input = "Question from doc2"
+        mock_golden_2.expected_tools = []
+        
+        mock_synthesizer.a_generate_goldens_from_contexts.side_effect = [
+            [mock_golden_1],  # First document
+            [mock_golden_2]   # Second document
+        ]
+
+        dataset = GoldenDataset("document_test")
+
+        with patch('app.evaluation.dataset.Synthesizer', return_value=mock_synthesizer), \
+             patch('app.evaluation.dataset.DocumentProcessor.load_document') as mock_load_doc, \
+             patch('app.evaluation.dataset.DocumentProcessor.parse_frontmatter') as mock_parse_fm, \
+             patch('app.utils.logging.logger'):
+            
+            # Mock document loading and frontmatter parsing
+            mock_load_doc.side_effect = ["Content of doc1", "Content of doc2"]
+            mock_parse_fm.side_effect = [
+                ({"tools": ["doc1_tool"], "contexts_with_metadata": [{"context": ["Doc1 context"], "tools": ["doc1_tool"]}]}, "Content of doc1"),
+                ({"tools": ["doc2_tool"], "contexts_with_metadata": [{"context": ["Doc2 context"], "tools": ["doc2_tool"]}]}, "Content of doc2")
+            ]
+            
+            await dataset.generate_from_documents(
+                document_paths=document_paths,
+                synthesizer_config=sample_synthesizer_config,
+                max_goldens_per_context=2
+            )
+
+        # Verify documents were loaded
+        assert mock_load_doc.call_count == 2
+        assert mock_parse_fm.call_count == 2
+        
+        # Verify synthesizer was called for each document context
+        assert mock_synthesizer.a_generate_goldens_from_contexts.call_count == 2
+        
+        # Verify goldens were added to dataset
+        assert len(dataset.goldens) == 2
+        assert dataset.goldens[0] == mock_golden_1
+        assert dataset.goldens[1] == mock_golden_2
+
+    @pytest.mark.asyncio
+    async def test_generate_from_documents_metadata_handling(self, sample_synthesizer_config):
+        """Test metadata handling in document generation"""
+        document_paths = ["/path/to/test_doc.md"]
+        
+        mock_synthesizer = AsyncMock()
+        mock_golden = MagicMock()
+        mock_golden.input = "Test question"
+        mock_golden.expected_tools = []
+        mock_golden.additional_metadata = {}
+        mock_synthesizer.a_generate_goldens_from_contexts.return_value = [mock_golden]
+
+        dataset = GoldenDataset("metadata_test")
+
+        with patch('app.evaluation.dataset.Synthesizer', return_value=mock_synthesizer), \
+             patch('app.evaluation.dataset.DocumentProcessor.load_document', return_value="Test content"), \
+             patch('app.evaluation.dataset.DocumentProcessor.parse_frontmatter') as mock_parse_fm, \
+             patch('app.utils.logging.logger'):
+            
+            # Mock frontmatter with predefined contexts
+            mock_parse_fm.return_value = (
+                {
+                    "tools": ["test_tool"],
+                    "expected_output": "Test expected output",
+                    "contexts_with_metadata": [{
+                        "context": ["Test context"],
+                        "tools": ["context_tool"],
+                        "expected_output": "Context expected output"
+                    }]
+                },
+                "Test content"
+            )
+            
+            await dataset.generate_from_documents(
+                document_paths=document_paths,
+                synthesizer_config=sample_synthesizer_config,
+                user_id="test_user"
+            )
+
+        # Verify golden was generated with correct metadata
+        assert len(dataset.goldens) == 1
+        golden = dataset.goldens[0]
+        
+        # Check that metadata was applied
+        assert hasattr(golden, 'additional_metadata')
+        assert golden.additional_metadata["source_document"] == "/path/to/test_doc.md"
+        assert golden.additional_metadata["context_type"] == "predefined"
+        assert golden.additional_metadata["user_id"] == "test_user"
+        assert golden.expected_output == "Context expected output"
+
+    @pytest.mark.asyncio
+    async def test_generate_from_documents_missing_file_error(self, sample_synthesizer_config):
+        """Test error handling for missing documents"""
+        document_paths = ["/nonexistent/doc.md"]
+        
+        dataset = GoldenDataset("error_test")
+
+        with patch('app.evaluation.dataset.Synthesizer') as MockSynthesizer, \
+             patch('app.evaluation.dataset.DocumentProcessor.load_document', side_effect=FileNotFoundError("File not found")), \
+             patch('app.evaluation.dataset.logger') as mock_logger:
+            
+            # Mock synthesizer
+            mock_synthesizer = AsyncMock()
+            MockSynthesizer.return_value = mock_synthesizer
+            
+            # Should continue processing despite errors and not raise exception
+            await dataset.generate_from_documents(
+                document_paths=document_paths,
+                synthesizer_config=sample_synthesizer_config
+            )
+
+        # Verify error was logged (from captured stderr we can see it calls error())
+        mock_logger.error.assert_called_once()
+        # Verify no goldens were added due to file error
+        assert len(dataset.goldens) == 0
+
+    @pytest.mark.asyncio
+    async def test_generate_from_documents_no_contexts_warning(self, sample_synthesizer_config):
+        """Test warning when document has no contexts"""
+        document_paths = ["/path/to/empty_doc.md"]
+        
+        dataset = GoldenDataset("warning_test")
+
+        with patch('app.evaluation.dataset.Synthesizer') as MockSynthesizer, \
+             patch('app.evaluation.dataset.DocumentProcessor.load_document', return_value="Empty content"), \
+             patch('app.evaluation.dataset.DocumentProcessor.parse_frontmatter', return_value=({}, "Empty content")), \
+             patch('app.evaluation.dataset.logger') as mock_logger:
+            
+            # Mock synthesizer
+            mock_synthesizer = AsyncMock()
+            MockSynthesizer.return_value = mock_synthesizer
+            
+            await dataset.generate_from_documents(
+                document_paths=document_paths,
+                synthesizer_config=sample_synthesizer_config
+            )
+
+        # Verify warning was logged
+        mock_logger.warning.assert_called_once_with("Evaluation Dataset - No context provided")
+        # Verify no goldens were added
+        assert len(dataset.goldens) == 0
+
+    # Tests for generate_from_knowledge_base method
+    @pytest.mark.asyncio
+    async def test_generate_from_knowledge_base_basic_flow(self, sample_synthesizer_config):
+        """Test basic knowledge base generation flow with mock knowledge base"""
+        mock_kb = MagicMock()
+        mock_kb.embedding_model = "test-embedding-model"
+        
+        # Mock documents
+        mock_doc = MagicMock()
+        mock_doc.id = "doc_123"
+        mock_doc.title = "Test Document"
+        mock_doc.namespace_type = "documents"
+        
+        # Use AsyncMock for async methods
+        mock_kb.list_documents = AsyncMock(return_value=[mock_doc])
+        
+        # Mock chunks
+        mock_chunk = MagicMock()
+        mock_chunk.content = "This is test chunk content"
+        mock_kb.vector_provider.get_document_chunks = AsyncMock(return_value=[mock_chunk])
+        
+        # Mock synthesizer
+        mock_synthesizer = AsyncMock()
+        mock_golden = MagicMock()
+        mock_golden.input = "Question about knowledge base"
+        mock_golden.expected_tools = []
+        mock_golden.additional_metadata = {}
+        mock_synthesizer.a_generate_goldens_from_contexts.return_value = [mock_golden]
+
+        dataset = GoldenDataset("kb_test")
+
+        with patch('app.evaluation.dataset.Synthesizer', return_value=mock_synthesizer), \
+             patch('app.evaluation.dataset.DocumentProcessor.create_contexts_from_chunks', return_value=[["Test context"]]), \
+             patch('app.utils.logging.logger'):
+            
+            await dataset.generate_from_knowledge_base(
+                knowledge_base=mock_kb,
+                user_id="test_user",
+                namespace_types=["documents"],
+                synthesizer_config=sample_synthesizer_config,
+                tools=["kb_tool"]
+            )
+
+        # Verify knowledge base was queried
+        mock_kb.list_documents.assert_called_once_with(
+            user_id="test_user",
+            namespace_type="documents",
+            embedding_model="test-embedding-model"
+        )
+        
+        # Verify chunks were retrieved
+        mock_kb.vector_provider.get_document_chunks.assert_called_once_with("doc_123")
+        
+        # Verify golden was generated
+        assert len(dataset.goldens) == 1
+        golden = dataset.goldens[0]
+        
+        # Check expected tools were set
+        assert len(golden.expected_tools) == 1
+        assert golden.expected_tools[0].name == "kb_tool"
+        
+        # Check retrieval context was set
+        assert golden.retrieval_context == ["Test context"]
+        
+        # Check metadata was set
+        assert golden.additional_metadata["source_document_id"] == "doc_123"
+        assert golden.additional_metadata["source_document_title"] == "Test Document"
+        assert golden.additional_metadata["user_id"] == "test_user"
+
+    @pytest.mark.asyncio
+    async def test_generate_from_knowledge_base_no_documents(self, sample_synthesizer_config):
+        """Test knowledge base generation with no documents found"""
+        mock_kb = MagicMock()
+        mock_kb.embedding_model = "test-embedding-model"
+        mock_kb.list_documents = AsyncMock(return_value=[])  # No documents
+
+        dataset = GoldenDataset("no_docs_test")
+
+        with patch('app.evaluation.dataset.Synthesizer') as MockSynthesizer, \
+             patch('app.evaluation.dataset.logger') as mock_logger:
+            
+            # Mock synthesizer
+            mock_synthesizer = AsyncMock()
+            MockSynthesizer.return_value = mock_synthesizer
+            
+            await dataset.generate_from_knowledge_base(
+                knowledge_base=mock_kb,
+                user_id="test_user", 
+                namespace_types=["documents"],
+                synthesizer_config=sample_synthesizer_config
+            )
+
+        # Verify no goldens were generated
+        assert len(dataset.goldens) == 0
+        
+        # Verify appropriate logging occurred
+        # Check that info was called multiple times including the expected call
+        call_args_list = [call[0][0] for call in mock_logger.info.call_args_list]
+        assert "  Found 0 documents in namespace 'documents'" in call_args_list
+
+    @pytest.mark.asyncio
+    async def test_generate_from_knowledge_base_no_chunks(self, sample_synthesizer_config):
+        """Test knowledge base generation when document has no chunks"""
+        mock_kb = MagicMock()
+        mock_kb.embedding_model = "test-embedding-model"
+        
+        # Mock document but no chunks
+        mock_doc = MagicMock()
+        mock_doc.id = "empty_doc"
+        mock_doc.title = "Empty Document"
+        mock_kb.list_documents = AsyncMock(return_value=[mock_doc])
+        mock_kb.vector_provider.get_document_chunks = AsyncMock(return_value=[])  # No chunks
+
+        dataset = GoldenDataset("no_chunks_test")
+
+        with patch('app.evaluation.dataset.Synthesizer') as MockSynthesizer, \
+             patch('app.evaluation.dataset.logger') as mock_logger:
+            
+            # Mock synthesizer
+            mock_synthesizer = AsyncMock()
+            MockSynthesizer.return_value = mock_synthesizer
+            
+            await dataset.generate_from_knowledge_base(
+                knowledge_base=mock_kb,
+                user_id="test_user",
+                namespace_types=["documents"],
+                synthesizer_config=sample_synthesizer_config
+            )
+
+        # Verify no goldens were generated
+        assert len(dataset.goldens) == 0
+        
+        # Verify warning was logged
+        mock_logger.warning.assert_called_once_with("  No chunks found for document empty_doc")
+
+    @pytest.mark.asyncio
+    async def test_generate_from_knowledge_base_multiple_namespaces(self, sample_synthesizer_config):
+        """Test knowledge base generation across multiple namespaces"""
+        mock_kb = MagicMock()
+        mock_kb.embedding_model = "test-embedding-model"
+        
+        # Mock documents from different namespaces
+        mock_doc1 = MagicMock()
+        mock_doc1.id = "doc1"
+        mock_doc1.title = "Doc 1"
+        mock_doc1.namespace_type = "documents"
+        
+        mock_doc2 = MagicMock()
+        mock_doc2.id = "doc2" 
+        mock_doc2.title = "Doc 2"
+        mock_doc2.namespace_type = "conversations"
+        
+        # Mock returning different docs for different namespaces
+        async def mock_list_documents(user_id, namespace_type, embedding_model):
+            if namespace_type == "documents":
+                return [mock_doc1]
+            elif namespace_type == "conversations":
+                return [mock_doc2]
+            return []
+        
+        mock_kb.list_documents = AsyncMock(side_effect=mock_list_documents)
+        
+        # Mock chunks for both documents
+        mock_chunk = MagicMock()
+        mock_chunk.content = "Test content"
+        mock_kb.vector_provider.get_document_chunks = AsyncMock(return_value=[mock_chunk])
+
+        dataset = GoldenDataset("multi_namespace_test")
+
+        with patch('app.evaluation.dataset.Synthesizer') as MockSynthesizer, \
+             patch('app.evaluation.dataset.DocumentProcessor.create_contexts_from_chunks', return_value=[["Context"]]), \
+             patch('app.utils.logging.logger'):
+            
+            # Mock synthesizer to return empty goldens to focus on namespace handling
+            mock_synthesizer = AsyncMock()
+            mock_synthesizer.a_generate_goldens_from_contexts.return_value = []
+            MockSynthesizer.return_value = mock_synthesizer
+            
+            await dataset.generate_from_knowledge_base(
+                knowledge_base=mock_kb,
+                user_id="test_user",
+                namespace_types=["documents", "conversations"],
+                synthesizer_config=sample_synthesizer_config
+            )
+
+        # Verify both namespaces were queried
+        assert mock_kb.list_documents.call_count == 2
+        calls = mock_kb.list_documents.call_args_list
+        
+        # Check first call for documents namespace
+        assert calls[0][1]["namespace_type"] == "documents"
+        # Check second call for conversations namespace  
+        assert calls[1][1]["namespace_type"] == "conversations"

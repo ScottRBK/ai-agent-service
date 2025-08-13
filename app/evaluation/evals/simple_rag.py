@@ -1,7 +1,6 @@
 from deepeval.synthesizer.config import StylingConfig
 from deepeval.metrics import (
     ToolCorrectnessMetric, 
-    GEval, 
     HallucinationMetric, 
     AnswerRelevancyMetric,
     FaithfulnessMetric,
@@ -141,35 +140,20 @@ async def knowledge_agent_test_context(test_users: List[str] = None):
     finally:
         # Cleanup: Delete all created documents
         if test_agents and created_document_ids:
-            logger.info(f"Cleaning up {len(created_document_ids)} test documents")
-            cleanup_failures = 0
+            logger.debug(f"Cleaning up {len(created_document_ids)} test documents")
             
             # Use the first available agent for cleanup (any agent can delete documents)
             cleanup_agent = list(test_agents.values())[0] if test_agents else None
             
             if cleanup_agent and cleanup_agent.knowledge_base:
-                for doc_id in created_document_ids:
-                    try:
-                        success = await cleanup_agent.knowledge_base.delete_document(doc_id)
-                        if not success:
-                            logger.warning(f"Document {doc_id} may not have been deleted (returned False)")
-                            cleanup_failures += 1
-                    except Exception as e:
-                        logger.error(f"Failed to delete test document {doc_id}: {e}")
-                        cleanup_failures += 1
-                
-                if cleanup_failures > 0:
-                    logger.warning(f"Failed to clean up {cleanup_failures} documents")
-                else:
-                    logger.info("Successfully cleaned up all test documents")
+                for test_user_id in test_users:
+                    await cleanup_agent.knowledge_base.delete_all_documents_for_user(test_user_id)
+                    logger.debug(f"Deleted {len(created_document_ids)} documents for test user {test_user_id}")
  
             if cleanup_agent and cleanup_agent.memory:
                 for test_user_id in test_users:
-                    try:
-                        count = await cleanup_agent.memory.clear_all_sessions_for_user(test_user_id)
-                        logger.info(f"Cleared {count} memory entries for test user {test_user_id}")
-                    except Exception as e:
-                        logger.error(f"Failed to clear memory for test user {test_user_id}: {e}")
+                    await cleanup_agent.memory.clear_all_sessions_for_user(test_user_id)
+                    logger.debug(f"Cleared memory entries for test user {test_user_id}")
 
 
 def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
@@ -210,20 +194,13 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
             ],
             tools=["search_knowledge_base"],
             expected_output="Based on Team Phoenix's discussion, you decided to implement Quixel Token Protocol (QTP-3) with 45-minute token expiration and use MemoryVault for session storage. Zara Chen proposed token scrambling algorithm with entropy seeds.",
-            retrieval_context=[
-                "Team Phoenix meeting from 2024-11-15: Discussed Quixel Token Protocol (QTP-3) implementation for Project Stellaris. "
-                        "Key decisions: Use QTP tokens with 45-minute expiration, implement cascade refresh mechanism, "
-                        "store sessions in MemoryVault for scalability. Security lead Zara Chen proposed token scrambling algorithm with entropy seeds."
-            ]
         )
     ]
     
     # Comprehensive metrics for knowledge base evaluation
     metrics = [
-        # Tool usage validation
         ToolCorrectnessMetric(threshold=0.9),
         
-        # RAG-specific metrics
         FaithfulnessMetric(
             threshold=0.7, 
             model=evaluation_model,
@@ -268,9 +245,9 @@ def create_evaluation_config(fixed_user_id: str = None) -> EvaluationConfig:
         contexts=contexts,
         dataset_name=f"{agent_id}_simple_rag_eval",
         dataset_file=f"{agent_id}_simple_rag_eval_goldens.pkl",
-        results_file=f"{agent_id}_simple_rag_eval_results"
+        results_file=f"{agent_id}_simple_rag_eval_results",
+        golden_generation_type="context",
     )
-
 
 async def main(generate_goldens: bool = False, print_verbose: bool = False):
     """Run knowledge agent evaluation with test data setup/teardown"""

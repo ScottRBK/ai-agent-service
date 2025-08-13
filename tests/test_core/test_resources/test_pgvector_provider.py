@@ -1453,3 +1453,125 @@ class TestIntegrationAndWorkflow:
         assert delete_result is True
         mock_session.delete.assert_called_once_with(mock_doc)
         mock_session.commit.assert_called_once()
+
+
+# ============================================================================
+# 14. Bulk User Deletion Tests
+# ============================================================================
+
+class TestBulkUserDeletion:
+    """Test bulk deletion of all documents for a user"""
+    
+    @pytest.mark.asyncio
+    async def test_delete_all_documents_for_user_success(self, provider, mock_session):
+        """Test successful deletion of all documents for a user"""
+        provider.SessionLocal = MagicMock(return_value=mock_session)
+        
+        # Mock that chunks and documents exist and are deleted
+        mock_chunk_query = MagicMock()
+        mock_doc_query = MagicMock()
+        
+        # Set up session.query to return different query objects for different tables
+        query_side_effects = [mock_chunk_query, mock_doc_query]
+        mock_session.query.side_effect = query_side_effects
+        
+        # Configure chunk query chain
+        mock_chunk_query.filter.return_value = mock_chunk_query
+        mock_chunk_query.delete.return_value = 5  # 5 chunks deleted
+        
+        # Configure document query chain  
+        mock_doc_query.filter.return_value = mock_doc_query
+        mock_doc_query.delete.return_value = 2  # 2 documents deleted
+        
+        result = await provider.delete_all_documents_for_user("test_user")
+        
+        assert result is True
+        
+        # Verify chunk deletion was called first
+        assert mock_session.query.call_args_list[0][0][0] == ChunkTable
+        mock_chunk_query.filter.assert_called_once()
+        mock_chunk_query.delete.assert_called_once()
+        
+        # Verify document deletion was called second
+        assert mock_session.query.call_args_list[1][0][0] == DocumentTable
+        mock_doc_query.filter.assert_called_once()
+        mock_doc_query.delete.assert_called_once()
+        
+        mock_session.commit.assert_called_once()
+        mock_session.close.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_delete_all_documents_for_user_isolates_users(self, provider, mock_session):
+        """Test that deletion only affects specified user's documents"""
+        provider.SessionLocal = MagicMock(return_value=mock_session)
+        
+        # Mock query objects
+        mock_chunk_query = MagicMock()
+        mock_doc_query = MagicMock()
+        
+        query_side_effects = [mock_chunk_query, mock_doc_query]
+        mock_session.query.side_effect = query_side_effects
+        
+        # Configure query chains
+        mock_chunk_query.filter.return_value = mock_chunk_query
+        mock_chunk_query.delete.return_value = 3
+        mock_doc_query.filter.return_value = mock_doc_query
+        mock_doc_query.delete.return_value = 1
+        
+        await provider.delete_all_documents_for_user("specific_user")
+        
+        # Verify that the filter was called with the correct user_id for chunks
+        chunk_filter_call = mock_chunk_query.filter.call_args[0][0]
+        assert hasattr(chunk_filter_call, 'left')  # SQLAlchemy comparison object
+        assert chunk_filter_call.left.name == 'user_id'
+        
+        # Verify that the filter was called with the correct user_id for documents
+        doc_filter_call = mock_doc_query.filter.call_args[0][0]
+        assert hasattr(doc_filter_call, 'left')  # SQLAlchemy comparison object  
+        assert doc_filter_call.left.name == 'user_id'
+        
+        mock_session.commit.assert_called_once()
+        mock_session.close.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_delete_all_documents_for_user_no_documents(self, provider, mock_session):
+        """Test deletion when no documents exist for the user"""
+        provider.SessionLocal = MagicMock(return_value=mock_session)
+        
+        # Mock query objects
+        mock_chunk_query = MagicMock()
+        mock_doc_query = MagicMock()
+        
+        query_side_effects = [mock_chunk_query, mock_doc_query]
+        mock_session.query.side_effect = query_side_effects
+        
+        # Configure query chains to return 0 deletions
+        mock_chunk_query.filter.return_value = mock_chunk_query
+        mock_chunk_query.delete.return_value = 0  # No chunks deleted
+        mock_doc_query.filter.return_value = mock_doc_query
+        mock_doc_query.delete.return_value = 0  # No documents deleted
+        
+        result = await provider.delete_all_documents_for_user("nonexistent_user")
+        
+        assert result is True  # Method should still return True (successful operation)
+        mock_chunk_query.delete.assert_called_once()
+        mock_doc_query.delete.assert_called_once()
+        mock_session.commit.assert_called_once()
+        mock_session.close.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_delete_all_documents_for_user_sqlalchemy_error(self, provider, mock_session):
+        """Test deletion with SQLAlchemy error"""
+        provider.SessionLocal = MagicMock(return_value=mock_session)
+        
+        # Mock query to raise error on chunk deletion
+        mock_chunk_query = MagicMock()
+        mock_session.query.return_value = mock_chunk_query
+        mock_chunk_query.filter.return_value = mock_chunk_query
+        mock_chunk_query.delete.side_effect = SQLAlchemyError("Database error")
+        
+        with pytest.raises(SQLAlchemyError, match="Database error"):
+            await provider.delete_all_documents_for_user("test_user")
+        
+        mock_session.rollback.assert_called_once()
+        mock_session.close.assert_called_once()

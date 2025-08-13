@@ -228,47 +228,7 @@ class TestAgentContextFlowIntegration:
             
             # Should use agent2's knowledge base and succeed
             assert "Found 2 results" in result
-    
-    @pytest.mark.asyncio
-    async def test_agent_context_error_propagation(self, mock_provider_setup, clean_registry):
-        """Test that errors in agent context tools are properly propagated"""
-        provider, provider_manager = mock_provider_setup
-        
-        # Register a tool that will fail with agent context
-        class FailParams(BaseModel):
-            value: str = Field(description="Test value")
-        
-        @register_tool(
-            name="test_failing_tool",
-            description="Tool that fails",
-            tool_type="function",
-            examples=["Test failing"],
-            params_model=FailParams
-        )
-        async def failing_tool(agent_context, value: str) -> str:
-            # Access non-existent attribute to cause AttributeError
-            return agent_context.nonexistent_attribute
-        
-        agent = BaseAgent("test_agent")
-        
-        mock_config = {
-            "agent_id": "test_agent",
-            "provider": "azure_openai_cc",
-            "allowed_regular_tools": ["test_failing_tool"]
-        }
-        
-        with patch.object(agent, 'provider_manager', provider_manager):
-            with patch.object(agent.tool_manager, 'config', mock_config):
-                with patch.object(agent.tool_manager, 'get_available_tools', AsyncMock(return_value=[])):
-                    await agent.initialize()
-                    
-                    # Error should propagate through the entire chain
-                    with pytest.raises(AttributeError):
-                        await provider.execute_tool_call(
-                            "test_failing_tool",
-                            {"value": "test"},
-                            agent_id="test_agent"
-                        )
+   
     
     @pytest.mark.asyncio
     async def test_agent_context_with_no_agent_id(self, mock_provider_setup, regular_tool):

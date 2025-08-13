@@ -6,7 +6,7 @@ from unittest.mock import Mock
 from deepeval.synthesizer.config import StylingConfig
 from deepeval.metrics import BaseMetric
 
-from app.evaluation.config import ContextWithMetadata, SynthesizerConfig, EvaluationConfig
+from app.evaluation.config import ContextWithMetadata, SynthesizerConfig, EvaluationConfig, GoldenGenerationType
 
 
 class TestContextWithMetadata:
@@ -274,7 +274,7 @@ class TestEvaluationConfig:
         
         required_fields = [
             'agent_id', 'synthesizer_config', 'metrics', 
-            'contexts', 'dataset_name', 'dataset_file', 'results_file'
+            'dataset_name', 'dataset_file', 'results_file'
         ]
         
         for field in required_fields:
@@ -379,3 +379,183 @@ class TestEvaluationConfig:
         assert data['dataset_name'] == "serialization_dataset"
         assert data['dataset_file'] == "serialization_dataset.pkl"
         assert data['results_file'] == "serialization_results"
+
+
+class TestGoldenGenerationType:
+    """Tests for GoldenGenerationType enum"""
+
+    def test_golden_generation_type_enum_values(self):
+        """Test GoldenGenerationType enum has expected values"""
+        assert GoldenGenerationType.DOCUMENT == "document"
+        assert GoldenGenerationType.CONTEXT == "context"
+        assert GoldenGenerationType.SCRATCH == "scratch"
+        assert GoldenGenerationType.KNOWLEDGE_BASE == "knowledge_base"
+
+    def test_golden_generation_type_enum_membership(self):
+        """Test GoldenGenerationType enum membership"""
+        assert "document" in GoldenGenerationType
+        assert "context" in GoldenGenerationType
+        assert "scratch" in GoldenGenerationType
+        assert "knowledge_base" in GoldenGenerationType
+        assert "invalid_type" not in GoldenGenerationType
+
+    def test_golden_generation_type_enum_iteration(self):
+        """Test GoldenGenerationType enum can be iterated"""
+        values = [gen_type.value for gen_type in GoldenGenerationType]
+        expected_values = ["document", "context", "scratch", "knowledge_base"]
+        assert values == expected_values
+
+
+class TestEvaluationConfigDocumentFields:
+    """Tests for EvaluationConfig document-related fields"""
+
+    @pytest.fixture
+    def mock_components(self):
+        """Create mock components for EvaluationConfig"""
+        mock_model = Mock()
+        styling_config = StylingConfig(
+            scenario="Document evaluation test",
+            task="Document evaluation task"
+        )
+        synthesizer_config = SynthesizerConfig(
+            model=mock_model,
+            styling_config=styling_config
+        )
+        
+        mock_metric = Mock(spec=BaseMetric)
+        mock_metric.name = "test_metric"
+        
+        context = ContextWithMetadata(
+            context=["Test context"],
+            tools=["test_tool"]
+        )
+        
+        return {
+            'synthesizer_config': synthesizer_config,
+            'metrics': [mock_metric],
+            'contexts': [context]
+        }
+
+    def test_evaluation_config_with_document_generation_type(self, mock_components):
+        """Test EvaluationConfig with document generation type"""
+        config = EvaluationConfig(
+            agent_id="document_agent",
+            synthesizer_config=mock_components['synthesizer_config'],
+            metrics=mock_components['metrics'],
+            contexts=mock_components['contexts'],
+            dataset_name="document_dataset",
+            dataset_file="document_dataset.pkl",
+            results_file="document_results",
+            golden_generation_type=GoldenGenerationType.DOCUMENT
+        )
+        
+        assert config.golden_generation_type == GoldenGenerationType.DOCUMENT
+        assert config.golden_generation_type == "document"
+
+    def test_evaluation_config_with_document_paths_and_metadata(self, mock_components):
+        """Test EvaluationConfig with document paths and metadata"""
+        document_paths = ["/path/to/doc1.md", "/path/to/doc2.txt"]
+        document_metadata = {
+            "doc1.md": {
+                "tools": ["search_tool", "analysis_tool"],
+                "expected_output": "Analysis complete",
+                "retrieval_context": ["Context from doc1"]
+            },
+            "doc2.txt": {
+                "tools": ["text_tool"],
+                "expected_output": "Text processed"
+            }
+        }
+        
+        config = EvaluationConfig(
+            agent_id="document_agent",
+            synthesizer_config=mock_components['synthesizer_config'],
+            metrics=mock_components['metrics'],
+            contexts=mock_components['contexts'],
+            dataset_name="document_dataset",
+            dataset_file="document_dataset.pkl",
+            results_file="document_results",
+            golden_generation_type=GoldenGenerationType.DOCUMENT,
+            document_paths=document_paths,
+            document_metadata=document_metadata
+        )
+        
+        assert config.document_paths == document_paths
+        assert config.document_metadata == document_metadata
+        assert config.document_metadata["doc1.md"]["tools"] == ["search_tool", "analysis_tool"]
+        assert config.document_metadata["doc2.txt"]["expected_output"] == "Text processed"
+
+    def test_evaluation_config_default_values_for_new_fields(self, mock_components):
+        """Test EvaluationConfig default values for new document-related fields"""
+        config = EvaluationConfig(
+            agent_id="default_agent",
+            synthesizer_config=mock_components['synthesizer_config'],
+            metrics=mock_components['metrics'],
+            contexts=mock_components['contexts'],
+            dataset_name="default_dataset",
+            dataset_file="default_dataset.pkl",
+            results_file="default_results"
+        )
+        
+        # Test default values
+        assert config.golden_generation_type == GoldenGenerationType.CONTEXT
+        assert config.document_paths is None
+        assert config.document_metadata is None
+        assert config.default_tools is None
+        assert config.use_document_as_retrieval is False
+        assert config.parse_frontmatter is True
+        assert config.chunk_size == 1000
+        assert config.chunk_overlap == 200
+        assert config.max_contexts_per_document == 3
+        assert config.max_goldens_per_context == 2
+        assert config.use_knowledge_base is False
+        assert config.persist_to_kb is False
+
+    def test_evaluation_config_with_knowledge_base_settings(self, mock_components):
+        """Test EvaluationConfig with knowledge base settings"""
+        config = EvaluationConfig(
+            agent_id="kb_agent",
+            synthesizer_config=mock_components['synthesizer_config'],
+            metrics=mock_components['metrics'],
+            contexts=mock_components['contexts'],
+            dataset_name="kb_dataset",
+            dataset_file="kb_dataset.pkl",
+            results_file="kb_results",
+            golden_generation_type=GoldenGenerationType.KNOWLEDGE_BASE,
+            use_knowledge_base=True,
+            persist_to_kb=True,
+            chunk_size=500,
+            chunk_overlap=100
+        )
+        
+        assert config.golden_generation_type == GoldenGenerationType.KNOWLEDGE_BASE
+        assert config.use_knowledge_base is True
+        assert config.persist_to_kb is True
+        assert config.chunk_size == 500
+        assert config.chunk_overlap == 100
+
+    def test_evaluation_config_with_document_processing_settings(self, mock_components):
+        """Test EvaluationConfig with document processing settings"""
+        default_tools = ["default_search", "default_analysis"]
+        
+        config = EvaluationConfig(
+            agent_id="processing_agent",
+            synthesizer_config=mock_components['synthesizer_config'],
+            metrics=mock_components['metrics'],
+            contexts=mock_components['contexts'],
+            dataset_name="processing_dataset",
+            dataset_file="processing_dataset.pkl",
+            results_file="processing_results",
+            golden_generation_type=GoldenGenerationType.DOCUMENT,
+            default_tools=default_tools,
+            use_document_as_retrieval=True,
+            parse_frontmatter=False,
+            max_contexts_per_document=5,
+            max_goldens_per_context=3
+        )
+        
+        assert config.default_tools == default_tools
+        assert config.use_document_as_retrieval is True
+        assert config.parse_frontmatter is False
+        assert config.max_contexts_per_document == 5
+        assert config.max_goldens_per_context == 3

@@ -14,6 +14,7 @@ The evaluation framework consists of several key components:
   - `EvaluationConfig`: Complete evaluation setup including agent, metrics, and datasets
   - `SynthesizerConfig`: Configuration for synthetic data generation
   - `ContextWithMetadata`: Context data paired with expected tool usage
+  - `GoldenGenerationType`: Enum supporting DOCUMENT, CONTEXT, SCRATCH, KNOWLEDGE_BASE options
 
 - **`runner.py`** - Main evaluation execution engine
   - Handles the complete evaluation workflow
@@ -25,6 +26,11 @@ The evaluation framework consists of several key components:
   - Creates and manages synthetic test cases
   - Supports serialization/deserialization of test data
   - Integrates with DeepEval's synthesizer for data generation
+  - Document-based golden generation from frontmatter metadata
+
+- **`document_processor.py`** - Document processing for evaluations
+  - Extends production DocumentLoader for evaluation-specific path resolution
+  - Minimal wrapper with clean inheritance pattern
 
 - **`evaluation_utils.py`** - Result analysis utilities
   - Formats and displays evaluation summaries
@@ -98,6 +104,52 @@ def create_evaluation_config() -> EvaluationConfig:
     )
 ```
 
+## Document-Based Golden Generation
+
+The evaluation framework supports generating test cases directly from documents with YAML frontmatter metadata. This enables creating evaluations from existing documentation or structured content.
+
+### Configuration
+
+Set `golden_generation_type` to `GoldenGenerationType.DOCUMENT` in your evaluation config:
+
+```python
+from app.evaluation.config import EvaluationConfig, GoldenGenerationType
+
+config = EvaluationConfig(
+    agent_id="knowledge_agent",
+    golden_generation_type=GoldenGenerationType.DOCUMENT,
+    input_documents_dir="path/to/documents",
+    # ... other config
+)
+```
+
+### Document Format
+
+Documents should include YAML frontmatter with `contexts_with_metadata` for explicit test control:
+
+```markdown
+---
+contexts_with_metadata:
+  - context: "Information about API authentication"
+    tools: ["knowledge_base__search_documents"]
+    persist_to_kb: true
+  - context: "Database configuration details"
+    tools: ["knowledge_base__search_documents"]
+    persist_to_kb: false
+---
+
+# Document Content
+
+This document contains information that will be used to generate test cases...
+```
+
+### Features
+
+- **Frontmatter Control**: Use `contexts_with_metadata` to define expected test behavior
+- **RAG Testing**: Optional `persist_to_kb` flag for knowledge base integration testing
+- **File Type Support**: Works with 30+ file types including markdown, text, JSON, and code files
+- **Metadata Extraction**: Automatic extraction from YAML frontmatter and JSON metadata
+
 ## Available Metrics
 
 The framework supports various DeepEval metrics:
@@ -160,6 +212,23 @@ python app/evaluation/evals/simple_eval.py --verbose
 - Contextual relevancy scoring (threshold: 0.7)
 - Tests current information retrieval (e.g., "who won the premier league in 2025")
 - Uses Ollama models for evaluation
+
+### Document-Based Evaluation (`simple_doc.py`)
+Example of document-based evaluation using frontmatter contexts for controlled test generation.
+
+```bash
+# Generate test cases from documents
+python app/evaluation/evals/simple_doc.py --generate
+
+# Run document-based evaluation
+python app/evaluation/evals/simple_doc.py --verbose
+```
+
+**Key Features:**
+- Document-based golden generation with frontmatter metadata
+- Knowledge base integration testing with RAG metrics
+- Contextual precision, recall, relevancy, and faithfulness evaluation
+- Example of `contexts_with_metadata` usage for explicit test control
 
 ### Temporal Awareness Evaluation (`temporal_awareness.py`)
 Evaluates agent's ability to handle time-based queries and current event information.

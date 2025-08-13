@@ -20,17 +20,15 @@ class SimpleChunkingStrategy(ChunkingStrategy):
         
         for sentence in sentences:
             sentence = sentence.strip()
-            if not sentence:
-                continue
-                
-            # Check if adding this sentence would exceed chunk size
+            if not sentence: continue
+            
             if len(current_chunk) + len(sentence) > chunk_size and current_chunk:
                 chunks.append(current_chunk.strip())
-                # Start new chunk with overlap
-                overlap_words = current_chunk.split()[-chunk_overlap:]
-                current_chunk = " ".join(overlap_words) + " " + sentence
+                # Take last chunk_overlap characters for overlap
+                overlap_text = current_chunk[-chunk_overlap:].lstrip() if chunk_overlap > 0 and len(current_chunk) > chunk_overlap else current_chunk.lstrip() if chunk_overlap > 0 else ""
+                current_chunk = (overlap_text + " " if overlap_text else "") + sentence
             else:
-                current_chunk += " " + sentence
+                current_chunk += (" " if current_chunk else "") + sentence
         
         # Add the last chunk
         if current_chunk.strip():
