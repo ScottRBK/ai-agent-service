@@ -576,35 +576,43 @@ class EnhancedRAGViewer:
                         st.info(row[field])
                     break
             
-            # If no explicit retrieval context, try to extract from verbose logs
-            if not has_retrieval and row.get('verbose_logs'):
-                verbose_str = str(row['verbose_logs'])
+            # If no explicit retrieval context, try to extract from actual tool calls
+            if not has_retrieval and row.get('actual_tool_calls'):
+                actual_calls = row.get('actual_tool_calls', [])
                 
-                # Try to extract from tool output (search_knowledge_base output)
-                if 'output=' in verbose_str and 'search_knowledge_base' in verbose_str:
-                    try:
-                        # Find the output section
-                        import re
-                        # Look for output="..." pattern, handling escaped quotes
-                        pattern = r'output="((?:[^"\\]|\\.|\\n)*)"'
-                        match = re.search(pattern, verbose_str)
+                # Find knowledge base searches
+                kb_searches = [tc for tc in actual_calls if tc.get('name') == 'search_knowledge_base']
+                
+                if kb_searches:
+                    has_retrieval = True
+                    st.markdown("""
+                    <div class="context-box">
+                        <h4>What the agent retrieved from knowledge base:</h4>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Display each knowledge base search
+                    for idx, search in enumerate(kb_searches, 1):
+                        if len(kb_searches) > 1:
+                            st.markdown(f"#### Search {idx}")
                         
-                        if match:
-                            retrieval_content = match.group(1)
-                            # Unescape the content
-                            retrieval_content = retrieval_content.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
-                            
-                            has_retrieval = True
-                            st.markdown("""
-                            <div class="context-box">
-                                <h4>What the agent retrieved from knowledge base:</h4>
-                            </div>
-                            """, unsafe_allow_html=True)
-                            
-                            # Parse the search results
-                            if 'Found' in retrieval_content and 'results:' in retrieval_content:
+                        # Show query parameters
+                        params = search.get('input_parameters', {})
+                        if params:
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Query:** `{params.get('query', 'N/A')}`")
+                            with col2:
+                                st.write(f"**Limit:** {params.get('limit', 'N/A')}")
+                        
+                        # Show actual results
+                        output = search.get('output', '')
+                        if output:
+                            # Try to parse structured output
+                            import re
+                            if 'Found' in output and 'results:' in output:
                                 # Split by numbered results
-                                results = re.split(r'\n\d+\.\s+\[', retrieval_content)
+                                results = re.split(r'\n\d+\.\s+\[', output)
                                 
                                 if len(results) > 1:
                                     # Show the header
@@ -631,53 +639,11 @@ class EnhancedRAGViewer:
                                 else:
                                     # Just show the raw content if we can't parse it
                                     with st.expander("📄 Retrieved Content", expanded=True):
-                                        st.text(retrieval_content[:3000])
+                                        st.text(output[:3000])
                             else:
                                 # Show raw retrieval content
                                 with st.expander("📄 Retrieved Content", expanded=True):
-                                    st.text(retrieval_content[:3000])
-                    except Exception as e:
-                        # Fallback to simpler extraction
-                        if 'Found' in verbose_str and 'results:' in verbose_str:
-                            start = verbose_str.find('Found')
-                            end = verbose_str.find('"]', start)
-                            if start != -1 and end != -1:
-                                retrieval_text = verbose_str[start:end]
-                                has_retrieval = True
-                                st.markdown("""
-                                <div class="context-box">
-                                    <h4>Retrieved context (extracted from logs):</h4>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                with st.expander("📄 Retrieved Content", expanded=True):
-                                    st.text(retrieval_text[:3000])
-                
-                # Alternative: look for retrieval_context in verbose logs
-                elif 'retrieval_context' in verbose_str.lower() or 'retrieved' in verbose_str.lower():
-                    st.markdown("""
-                    <div class="context-box">
-                        <h4>Retrieved context (from logs):</h4>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Try to extract retrieval context from verbose logs
-                    lines = verbose_str.split('\n')
-                    retrieval_lines = []
-                    in_retrieval = False
-                    
-                    for line in lines:
-                        if 'retrieval' in line.lower() or 'retrieved' in line.lower():
-                            in_retrieval = True
-                        elif in_retrieval and (line.strip() == '' or line.startswith('---')):
-                            break
-                        elif in_retrieval:
-                            retrieval_lines.append(line)
-                    
-                    if retrieval_lines:
-                        with st.expander("📄 Extracted Retrieval Context", expanded=True):
-                            st.text('\n'.join(retrieval_lines[:50]))  # Limit to first 50 lines
-                    else:
-                        st.info("No explicit retrieval context found in the evaluation data. The agent may have used its knowledge base or the retrieval wasn't captured.")
+                                    st.text(output[:3000])
             
             if not has_retrieval:
                 st.info("ℹ️ No retrieval context data available. The agent may have answered from its training or the retrieval wasn't logged.")
@@ -721,11 +687,12 @@ class EnhancedRAGViewer:
         st.markdown("### 🔬 Retrieval Quality Analysis")
         
         # Tool usage analysis
-        if row.get('expected_tools') or row.get('actual_tools'):
+        if row.get('expected_tool_calls') or row.get('actual_tool_calls'):
             st.subheader("🔧 Tool Usage Analysis")
             
-            expected = set(row.get('expected_tools', []))
-            actual = set(row.get('actual_tools', []))
+            # Extract tool names from the new format
+            expected = set(t.get('name') for t in row.get('expected_tool_calls', []))
+            actual = set(t.get('name') for t in row.get('actual_tool_calls', []))
             
             correct = expected & actual
             missing = expected - actual
@@ -762,6 +729,37 @@ class EnhancedRAGViewer:
                         """, unsafe_allow_html=True)
                 else:
                     st.write("None")
+        
+        # Show tool call details if available
+        actual_calls = row.get('actual_tool_calls', [])
+        if actual_calls:
+            st.markdown("---")
+            st.markdown("### 📊 Tool Call Details")
+            
+            for idx, tool_call in enumerate(actual_calls, 1):
+                tool_name = tool_call.get('name', 'Unknown')
+                
+                with st.expander(f"🔧 {tool_name} (Call #{idx})", expanded=(idx == 1)):
+                    # Show input parameters
+                    params = tool_call.get('input_parameters')
+                    if params:
+                        st.markdown("**Input Parameters:**")
+                        st.json(params)
+                    else:
+                        st.info("No input parameters")
+                    
+                    # Show output (truncated)
+                    output = tool_call.get('output')
+                    if output:
+                        st.markdown("**Output:**")
+                        if isinstance(output, str) and len(output) > 500:
+                            st.text(output[:500] + "...")
+                            if st.button(f"Show full output", key=f"full_output_{idx}"):
+                                st.text(output)
+                        else:
+                            st.text(str(output))
+                    else:
+                        st.info("No output captured")
 
     def _render_analysis_tab(self, row, test_data):
         """Render analysis and chain of thought tab"""

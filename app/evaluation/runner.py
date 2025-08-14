@@ -159,7 +159,7 @@ class EvaluationRunner:
         for tool_call in tool_calls:
 
             tc = ToolCall(name=tool_call["tool_name"], 
-                            input_parameters=tool_call.get("parameters", {}), 
+                            input_parameters=tool_call.get("arguments", {}), 
                             output=tool_call.get("results", None))
             
             evaluation_tool_calls.append(tc)
@@ -214,8 +214,20 @@ class EvaluationRunner:
             'retrieval_context': retrieval_context,
             'additional_metadata': {
                 'agent_id': self.config.agent_id,
-                'expected_tool_names': [t.name for t in golden.expected_tools],
-                'actual_tool_names': [t.name for t in tool_calls],
+                'expected_tool_calls': [
+                    {
+                        'name': tc.name,
+                        'input_parameters': tc.input_parameters,
+                        'output': tc.output
+                    } for tc in golden.expected_tools
+                ],
+                'actual_tool_calls': [
+                    {
+                        'name': tc.name,
+                        'input_parameters': tc.input_parameters,
+                        'output': tc.output
+                    } for tc in tool_calls
+                ],
                 'chain_of_thought': chain_of_thought,
             }
         }
@@ -234,8 +246,8 @@ class EvaluationRunner:
                 'overall_success': test_result['success'],
                 'input': test_result['input'],
                 'actual_output': test_result.get('actual_output', ''),
-                'expected_tools': metadata.get('expected_tool_names', []),
-                'actual_tools': metadata.get('actual_tool_names', []),
+                'expected_tool_calls': metadata.get('expected_tool_calls', []),
+                'actual_tool_calls': metadata.get('actual_tool_calls', []),
                 'chain_of_thought': metadata.get('chain_of_thought', ''),
                 'agent_id': metadata.get('agent_id', self.config.agent_id),
             }
