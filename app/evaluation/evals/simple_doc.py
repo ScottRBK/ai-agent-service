@@ -83,7 +83,7 @@ def create_evaluation_config() -> EvaluationConfig:
         results_file=f"{agent_id}_simple_doc_eval_results.pkl",
         metrics=metrics,
         parse_frontmatter=True,
-        document_paths=["knowledge_docs/fictitious_knowledge_base.md"],
+        document_paths=["knowledge_docs/file_user_guide.md"],
         golden_generation_type="document",
         persist_to_kb=True
     )

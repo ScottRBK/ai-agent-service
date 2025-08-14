@@ -546,36 +546,179 @@ class EnhancedRAGViewer:
 
     def _render_context_tab(self, row):
         """Render context and retrieval information tab"""
-        st.subheader("🔍 Retrieval Context")
+        st.subheader("🔍 Context & Retrieval Information")
         
-        # Show retrieved context if available
-        if row.get('retrieval_context'):
-            st.markdown("""
-            <div class="context-box">
-                <h4>Retrieved Context</h4>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if isinstance(row['retrieval_context'], list):
-                for idx, ctx in enumerate(row['retrieval_context'], 1):
-                    with st.expander(f"Context Chunk {idx}"):
-                        st.write(ctx)
-            else:
-                st.write(row['retrieval_context'])
+        # Create two columns for side-by-side comparison
+        col1, col2 = st.columns(2)
         
-        # Show expected context
-        if row.get('context'):
-            st.markdown("""
-            <div class="context-box">
-                <h4>Expected Context</h4>
-            </div>
-            """, unsafe_allow_html=True)
+        with col1:
+            st.markdown("### 📥 Actual Retrieved Context")
             
-            if isinstance(row['context'], list):
-                for ctx in row['context']:
-                    st.write(f"• {ctx}")
+            # Check for retrieval_context in the data
+            has_retrieval = False
+            
+            # Try different possible fields for retrieval context
+            retrieval_fields = ['retrieval_context', 'retrieved_context', 'actual_context']
+            for field in retrieval_fields:
+                if row.get(field):
+                    has_retrieval = True
+                    st.markdown("""
+                    <div class="context-box">
+                        <h4>What the agent actually retrieved:</h4>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    if isinstance(row[field], list):
+                        for idx, ctx in enumerate(row[field], 1):
+                            with st.expander(f"📄 Retrieved Chunk {idx}", expanded=(idx == 1)):
+                                st.write(ctx)
+                    else:
+                        st.info(row[field])
+                    break
+            
+            # If no explicit retrieval context, try to extract from verbose logs
+            if not has_retrieval and row.get('verbose_logs'):
+                verbose_str = str(row['verbose_logs'])
+                
+                # Try to extract from tool output (search_knowledge_base output)
+                if 'output=' in verbose_str and 'search_knowledge_base' in verbose_str:
+                    try:
+                        # Find the output section
+                        import re
+                        # Look for output="..." pattern, handling escaped quotes
+                        pattern = r'output="((?:[^"\\]|\\.|\\n)*)"'
+                        match = re.search(pattern, verbose_str)
+                        
+                        if match:
+                            retrieval_content = match.group(1)
+                            # Unescape the content
+                            retrieval_content = retrieval_content.replace('\\n', '\n').replace('\\"', '"').replace('\\\\', '\\')
+                            
+                            has_retrieval = True
+                            st.markdown("""
+                            <div class="context-box">
+                                <h4>What the agent retrieved from knowledge base:</h4>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Parse the search results
+                            if 'Found' in retrieval_content and 'results:' in retrieval_content:
+                                # Split by numbered results
+                                results = re.split(r'\n\d+\.\s+\[', retrieval_content)
+                                
+                                if len(results) > 1:
+                                    # Show the header
+                                    header = results[0].strip()
+                                    if header:
+                                        st.info(header)
+                                    
+                                    # Show each result in an expander
+                                    for i, result in enumerate(results[1:], 1):
+                                        # Extract file name and score
+                                        file_match = re.match(r'([^\]]+)\]\s*\(Score:\s*([\d.]+)\)', result)
+                                        if file_match:
+                                            filename = file_match.group(1)
+                                            score = file_match.group(2)
+                                            # Get the content after the score line
+                                            content_start = result.find('\n')
+                                            content = result[content_start:].strip() if content_start != -1 else result
+                                            
+                                            with st.expander(f"📄 Result {i}: [{filename}] (Score: {score})", expanded=(i <= 2)):
+                                                st.text(content[:1000])  # Limit content length
+                                        else:
+                                            with st.expander(f"📄 Result {i}", expanded=(i <= 2)):
+                                                st.text(result[:1000])
+                                else:
+                                    # Just show the raw content if we can't parse it
+                                    with st.expander("📄 Retrieved Content", expanded=True):
+                                        st.text(retrieval_content[:3000])
+                            else:
+                                # Show raw retrieval content
+                                with st.expander("📄 Retrieved Content", expanded=True):
+                                    st.text(retrieval_content[:3000])
+                    except Exception as e:
+                        # Fallback to simpler extraction
+                        if 'Found' in verbose_str and 'results:' in verbose_str:
+                            start = verbose_str.find('Found')
+                            end = verbose_str.find('"]', start)
+                            if start != -1 and end != -1:
+                                retrieval_text = verbose_str[start:end]
+                                has_retrieval = True
+                                st.markdown("""
+                                <div class="context-box">
+                                    <h4>Retrieved context (extracted from logs):</h4>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                with st.expander("📄 Retrieved Content", expanded=True):
+                                    st.text(retrieval_text[:3000])
+                
+                # Alternative: look for retrieval_context in verbose logs
+                elif 'retrieval_context' in verbose_str.lower() or 'retrieved' in verbose_str.lower():
+                    st.markdown("""
+                    <div class="context-box">
+                        <h4>Retrieved context (from logs):</h4>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Try to extract retrieval context from verbose logs
+                    lines = verbose_str.split('\n')
+                    retrieval_lines = []
+                    in_retrieval = False
+                    
+                    for line in lines:
+                        if 'retrieval' in line.lower() or 'retrieved' in line.lower():
+                            in_retrieval = True
+                        elif in_retrieval and (line.strip() == '' or line.startswith('---')):
+                            break
+                        elif in_retrieval:
+                            retrieval_lines.append(line)
+                    
+                    if retrieval_lines:
+                        with st.expander("📄 Extracted Retrieval Context", expanded=True):
+                            st.text('\n'.join(retrieval_lines[:50]))  # Limit to first 50 lines
+                    else:
+                        st.info("No explicit retrieval context found in the evaluation data. The agent may have used its knowledge base or the retrieval wasn't captured.")
+            
+            if not has_retrieval:
+                st.info("ℹ️ No retrieval context data available. The agent may have answered from its training or the retrieval wasn't logged.")
+        
+        with col2:
+            st.markdown("### 📋 Expected Context")
+            
+            if row.get('context'):
+                st.markdown("""
+                <div class="context-box" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); border-left-color: #0284c7;">
+                    <h4 style="color: #075985;">What should have been retrieved:</h4>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Handle both string and list formats
+                if isinstance(row['context'], str):
+                    # Try to parse as JSON list first
+                    try:
+                        import json
+                        context_list = json.loads(row['context'].replace("'", '"'))
+                        if isinstance(context_list, list):
+                            for idx, ctx in enumerate(context_list, 1):
+                                with st.expander(f"📌 Expected Item {idx}", expanded=(idx == 1)):
+                                    st.write(ctx)
+                        else:
+                            st.info(row['context'])
+                    except:
+                        # If not JSON, display as is
+                        st.info(row['context'])
+                elif isinstance(row['context'], list):
+                    for idx, ctx in enumerate(row['context'], 1):
+                        with st.expander(f"📌 Expected Item {idx}", expanded=(idx == 1)):
+                            st.write(ctx)
+                else:
+                    st.info(str(row['context']))
             else:
-                st.write(row['context'])
+                st.info("ℹ️ No expected context defined for this test case.")
+        
+        # Comparison Analysis
+        st.markdown("---")
+        st.markdown("### 🔬 Retrieval Quality Analysis")
         
         # Tool usage analysis
         if row.get('expected_tools') or row.get('actual_tools'):
