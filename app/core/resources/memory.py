@@ -14,9 +14,9 @@ from app.core.resources.base import BaseResource, ResourceType, ResourceError, R
 from app.models.resources.memory import MemoryEntry, MemorySessionSummary 
 from app.utils.logging import logger
 
-Base = declarative_base()  # Add this line back
+Base = declarative_base() 
 
-class MemoryEntryTable(Base):  # Renamed to avoid confusion
+class MemoryEntryTable(Base): 
     """Database table model for memory entries."""
     __tablename__ = 'memory_entries'
     
@@ -62,7 +62,6 @@ class PostgreSQLMemoryResource(BaseResource):
     async def initialize(self) -> None:
         """Initialize PostgreSQL connection and create tables."""
         try:
-            # Use psycopg (version 3) dialect instead of psycopg2
             connection_string = self.connection_string
             if connection_string.startswith('postgresql://'):
                 connection_string = connection_string.replace('postgresql://', 'postgresql+psycopg://', 1)
@@ -70,7 +69,6 @@ class PostgreSQLMemoryResource(BaseResource):
             self.engine = create_engine(connection_string)
             self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
             
-            # Create tables
             Base.metadata.create_all(bind=self.engine)
             
             self.initialized = True

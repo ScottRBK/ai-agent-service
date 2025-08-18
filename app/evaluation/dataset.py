@@ -288,7 +288,6 @@ class GoldenDataset:
         with open(filepath, 'rb') as f:
             self.goldens = pickle.load(f)
 
-    
     def to_dataframe(self) -> pd.DataFrame:
         """Convert to pandas DataFrame for analysis"""
         data = []
