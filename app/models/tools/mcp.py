@@ -1,9 +1,11 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict
 
 class MCPHeader(BaseModel):
-    """Response MCP header model"""
-    authorization: str = Field(description="The authorization token for the MCP server")
+    """MCP header model - supports any headers via extra='allow'"""
+    model_config = ConfigDict(extra='allow')
+    
+    authorization: Optional[str] = Field(None, description="The authorization token for the MCP server")
 
 class MCP(BaseModel):
     """Response MCP model"""

@@ -42,6 +42,31 @@ class AgentToolManager:
         self.mcp_servers_cache = None
         self.mcp_tools_cache = None
     
+    def _prepare_headers(self, server) -> Dict[str, str]:
+        """
+        Prepare headers with user_id injection for x-user-id.
+        
+        Args:
+            server: MCP server configuration
+            
+        Returns:
+            Dictionary of headers to use for the MCP client
+        """
+        headers = {}
+        if server.header:
+            # Convert header model to dict (includes extra fields via extra='allow')
+            header_dict = server.header.model_dump()
+            
+            # Inject user_id if x-user-id is present and agent has user_id
+            if 'x-user-id' in header_dict and header_dict['x-user-id'] == '' and self.agent_instance:
+                header_dict['x-user-id'] = getattr(self.agent_instance, 'user_id', 'default_user')
+                logger.debug(f"Injected user_id '{header_dict['x-user-id']}' into x-user-id header")
+            
+            # Only add non-empty headers
+            headers = {k: v for k, v in header_dict.items() if v}
+        
+        return headers
+    
     def load_agent_config(self) -> Dict[str, Any]:
         """
         Load agent configuration from agent_config.json or return default config.
@@ -205,10 +230,13 @@ class AgentToolManager:
         try:
             if mcp_server.server_url:
                 # HTTP-based MCP server
-                if mcp_server.header.authorization:
-                    mcp_client = Client(mcp_server.server_url, auth=mcp_server.header.authorization)
-                else:
-                    mcp_client = Client(mcp_server.server_url)
+                from fastmcp.client.transports import StreamableHttpTransport
+                
+                headers = self._prepare_headers(mcp_server)
+                
+                # Use StreamableHttpTransport to support all headers
+                transport = StreamableHttpTransport(mcp_server.server_url, headers=headers)
+                mcp_client = Client(transport)
             elif mcp_server.command:
                 # Command-based MCP server using fastmcp StdioTransport
                 from fastmcp.client.transports import StdioTransport
@@ -306,10 +334,13 @@ class AgentToolManager:
         
         if server.server_url:
             # HTTP-based server
-            if server.header.authorization:
-                client = Client(server.server_url, auth=server.header.authorization)
-            else:
-                client = Client(server.server_url)
+            from fastmcp.client.transports import StreamableHttpTransport
+            
+            headers = self._prepare_headers(server)
+            
+            # Use StreamableHttpTransport to support all headers
+            transport = StreamableHttpTransport(server.server_url, headers=headers)
+            client = Client(transport)
         elif server.command:
             # Command-based server using fastmcp StdioTransport
             from fastmcp.client.transports import StdioTransport
