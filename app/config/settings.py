@@ -49,6 +49,20 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "your_password_here"
     POSTGRES_DB: str = "postgres"
 
+    # User Session Management
+    ENABLE_USER_SESSION_MANAGEMENT: bool = False  # Start disabled for safety
+    AUTH_HEADER_PREFIX: str = "X-OpenWebUI-"  # Header prefix for auth headers
+    AUTH_TRUSTED_EMAIL_HEADER: str = ""  # e.g., "X-OpenWebUI-User-Email"
+    AUTH_TRUSTED_NAME_HEADER: str = ""   # e.g., "X-OpenWebUI-User-Name"
+    AUTH_TRUSTED_ID_HEADER: str = ""     # e.g., "X-OpenWebUI-User-Id"
+    AUTH_TRUSTED_ROLE_HEADER: str = ""   # e.g., "X-OpenWebUI-User-Role"
+    AUTH_TRUSTED_GROUPS_HEADER: str = ""  # e.g., "X-OpenWebUI-User-Groups"
+    AUTH_SESSION_HEADER: str = ""         # e.g., "X-OpenWebUI-Session-Id"
+    AUTH_CHAT_ID_HEADER: str = ""         # e.g., "X-OpenWebUI-Chat-Id"
+    ENABLE_FORWARD_USER_HEADERS: bool = False  # Forward headers to providers
+    AUTH_FALLBACK_USER_ID: str = "default_user"
+    AUTH_FALLBACK_SESSION_ID: str = "default_session"
+
     # Note: MCP server tokens are handled dynamically via environment variable substitution
     # in ToolRegistry.load_mcp_servers(). No need to declare them here.
     # Example: ${GITHUB_TOKEN}, ${NEW_SERVICE_TOKEN}, etc. will be resolved automatically.
@@ -56,7 +70,7 @@ class Settings(BaseSettings):
     """Pydantic configuration."""   
     model_config = ConfigDict(
         env_file = ".env",
-        case_sensitive = True,
+        case_sensitive = False,
         extra = "ignore"  # Allow extra environment variables for MCP server tokens
     )
 

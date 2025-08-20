@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -7,6 +7,9 @@ import time
 import json
 import os
 from app.utils.logging import logger
+from app.api.dependencies import get_auth_context_dep
+from app.models.auth import AuthContext
+from app.config.settings import settings
 
 router = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
@@ -60,13 +63,20 @@ class ChatCompletionResponse(BaseModel):
     usage: Dict[str, int]
 
 @router.post("/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
+async def chat_completions(request: ChatCompletionRequest,
+                           fastapi_request: Request,
+                           auth_context: AuthContext = Depends(get_auth_context_dep),
+                           ):
+
     """
     OpenAI-compatible chat completions endpoint.
     The 'model' parameter is interpreted as the agent_id.
     Supports both streaming and non-streaming responses.
     """
     logger.debug(f"OpenAI-compatible - chat completions - request: {request}")
+    logger.info(f"Auth context - User: {auth_context.user.user_id}, Session: {auth_context.session.session_id}")
+    logger.info(f"Auth context full - User details: {auth_context.user.model_dump()}")
+    logger.info(f"Raw headers received: {dict(fastapi_request.headers)}")
     try:
         # Input validation
         if not isinstance(request.messages, list) or len(request.messages) == 0:
@@ -79,9 +89,9 @@ async def chat_completions(request: ChatCompletionRequest):
         if request.max_tokens is not None and request.max_tokens < 0:
             raise HTTPException(status_code=422, detail="'max_tokens' must be non-negative")
         
-        user_id = "default_user"
-        session_id = "default_session"
-
+        user_id = auth_context.user.user_id
+        session_id = auth_context.session.session_id
+        
         # Extract agent_id from model parameter
         agent_id = request.model
 
@@ -102,7 +112,7 @@ async def chat_completions(request: ChatCompletionRequest):
         # Create API agent
         agent = APIAgent(
             agent_id=agent_id,
-            user_id=user_id,  # Could be extracted from auth
+            user_id=user_id,  
             session_id=session_id
         )
 

@@ -11,44 +11,8 @@ services:
     container_name: ${DEV_CONTAINER_NAME:-ai-agent-service-dev}
     ports:
       - "${PORT:-8000}:${CONTAINER_PORT:-8000}"
-    environment:
-      # Configuration file paths - can be overridden via .env
-      AGENT_CONFIG_PATH: ${AGENT_CONFIG_PATH:-/app/config/agent_config.json}
-      MCP_CONFIG_PATH: ${MCP_CONFIG_PATH:-/app/config/mcp.json}
-      PROMPTS_DIR_PATH: ${PROMPTS_DIR_PATH:-/app/config/prompts}
-
-      # Azure OpenAI Configuration
-      AZURE_OPENAI_BASE_URL: ${AZURE_OPENAI_BASE_URL}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
-      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
-      AZURE_OPENAI_DEFAULT_MODEL: ${AZURE_OPENAI_DEFAULT_MODEL}
-
-      # Ollama Configuration
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
-      OLLAMA_DEFAULT_MODEL: ${OLLAMA_DEFAULT_MODEL}
-
-      # PostgreSQL Configuration
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-
-      SEARXNG_MCP_SEARXNG_URL: "http://searxng:8089"
-      SEARXNG_MCP_TIMEOUT: "10"
-      SEARXNG_MCP_DEFAULT_RESULT_COUNT: "10"
-      SEARXNG_MCP_DEFAULT_LANGUAGE: "all"
-      SEARXNG_MCP_DEFAULT_FORMAT: "text"
-      SEARXNG_MCP_LOG_LEVEL: "ERROR"
-
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-
-      # Service Configuration
-      SERVICE_NAME: ${SERVICE_NAME:-ai-agent-service}
-      SERVICE_VERSION: ${SERVICE_VERSION:-0.1.0}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-
-
+    env_file:
+    - .env
     volumes:
       # Mount configuration files and directories
       - ${AGENT_CONFIG_FILE:-../agent_config.json}:/app/config/agent_config.json:ro

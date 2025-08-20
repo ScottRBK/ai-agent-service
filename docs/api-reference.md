@@ -60,13 +60,13 @@ POST /agents/{agent_id}/chat
 ```json
 {
   "message": "What is the current time in Tokyo?",
-  "user_id": "user123",
-  "session_id": "session456",
+  "user_id": "user123",        // Optional if provided via headers
+  "session_id": "session456",   // Optional if provided via headers
   "stream": false
 }
 ```
 
-**Example:**
+**Example with Request Body:**
 ```bash
 curl -X POST "http://localhost:8001/agents/research_agent/chat" \
   -H "Content-Type: application/json" \
@@ -74,6 +74,17 @@ curl -X POST "http://localhost:8001/agents/research_agent/chat" \
     "message": "What is the current time in Tokyo?",
     "user_id": "user123",
     "session_id": "session456"
+  }'
+```
+
+**Example with Headers (preferred for Open WebUI integration):**
+```bash
+curl -X POST "http://localhost:8001/agents/research_agent/chat" \
+  -H "Content-Type: application/json" \
+  -H "X-OpenWebUI-User-Id: user123" \
+  -H "X-OpenWebUI-Chat-Id: chat789" \
+  -d '{
+    "message": "What is the current time in Tokyo?"
   }'
 ```
 
@@ -126,6 +137,8 @@ curl -X DELETE "http://localhost:8001/agents/research_agent/conversation/session
 ```
 
 ## OpenAI-Compatible API
+
+> **Note**: The OpenAI-compatible endpoints fully support header-based authentication. When integrated with Open WebUI, user and session context is automatically extracted from headers, making these endpoints ideal for seamless integration.
 
 ### List Models
 ```bash
@@ -382,8 +395,113 @@ for chunk in stream:
 
 ## Authentication and Security
 
-- Authentication will be added at a later date
+> **Important**: The service currently implements user and session management through trusted headers, but does **NOT** perform authentication. It trusts that authentication has been handled by an upstream service (like Open WebUI or a reverse proxy). Actual authentication/authorization will be added in a future release.
+
+### User and Session Management
+
+The service supports header-based user identification and session management. This allows the service to maintain separate contexts for different users and sessions when deployed behind an authenticating proxy or service like Open WebUI.
+
+#### Trusted Headers for User Context
+
+When `ENABLE_USER_SESSION_MANAGEMENT=true` is configured, the service trusts and extracts user and session information from the following headers:
+
+| Header | Environment Variable | Description |
+|--------|---------------------|-------------|
+| `X-OpenWebUI-User-Id` | `AUTH_TRUSTED_ID_HEADER` | Unique user identifier (required) |
+| `X-OpenWebUI-User-Email` | `AUTH_TRUSTED_EMAIL_HEADER` | User's email address |
+| `X-OpenWebUI-User-Name` | `AUTH_TRUSTED_NAME_HEADER` | User's display name |
+| `X-OpenWebUI-User-Role` | `AUTH_TRUSTED_ROLE_HEADER` | User role (e.g., "user", "admin") |
+| `X-OpenWebUI-User-Groups` | `AUTH_TRUSTED_GROUPS_HEADER` | Comma-separated list of user groups |
+| `X-OpenWebUI-Session-Id` | `AUTH_SESSION_HEADER` | Session identifier |
+| `X-OpenWebUI-Chat-Id` | `AUTH_CHAT_ID_HEADER` | Chat/conversation identifier |
+
+#### User Context Priority
+
+The service uses the following priority for determining user and session context:
+
+1. **Trusted Headers (highest priority)**: If user headers are present from a trusted upstream service, they take precedence
+2. **Request body**: If no headers are present, `user_id` and `session_id` from the request body are used
+3. **Defaults (lowest priority)**: Falls back to `default_user` and `default_session`
+
+> **Security Note**: Since there is no authentication, anyone can pass these headers or body parameters. Only use this in trusted environments or behind an authenticating proxy.
+
+#### Session Management Behavior
+
+- **Chat ID as Session**: When Open WebUI provides a `chat_id` header but no `session_id`, the chat ID is automatically used as the session ID
+- **Memory Isolation**: Each session maintains its own conversation memory
+- **User Isolation**: Memory and resources are isolated per user
+
+#### Example: Request with User Context Headers
+
+```bash
+curl -X POST "http://localhost:8001/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "X-OpenWebUI-User-Id: user123" \
+  -H "X-OpenWebUI-User-Email: user@example.com" \
+  -H "X-OpenWebUI-User-Name: John Doe" \
+  -H "X-OpenWebUI-Chat-Id: chat789" \
+  -d '{
+    "model": "research_agent",
+    "messages": [
+      {"role": "user", "content": "What is the current time?"}
+    ]
+  }'
+```
+
+In this case:
+- User context is extracted from trusted headers
+- `chat789` is used as both chat_id and session_id
+- Memory is maintained specific to this user and chat session
+- **Note**: The service trusts these headers without verification
+
+#### Open WebUI Integration
+
+When integrated with Open WebUI:
+1. Open WebUI handles user authentication
+2. Enable header forwarding in Open WebUI: `ENABLE_FORWARD_USER_INFO_HEADERS=true`
+3. Configure the agent service to trust headers: `ENABLE_USER_SESSION_MANAGEMENT=true`
+4. Open WebUI automatically sends user context headers with each request
+5. Each Open WebUI chat maintains its own session context using the chat ID
+
+> **Trust Model**: The agent service trusts that Open WebUI has properly authenticated users. It does not verify the headers themselves.
+
+#### Configuration Example
+
+```env
+# Enable user session management
+ENABLE_USER_SESSION_MANAGEMENT=true
+
+# Configure header names (case-insensitive)
+AUTH_TRUSTED_ID_HEADER=x-openwebui-user-id
+AUTH_TRUSTED_EMAIL_HEADER=x-openwebui-user-email
+AUTH_TRUSTED_NAME_HEADER=x-openwebui-user-name
+AUTH_TRUSTED_ROLE_HEADER=x-openwebui-user-role
+AUTH_TRUSTED_GROUPS_HEADER=x-openwebui-user-groups
+AUTH_SESSION_HEADER=x-openwebui-session-id
+AUTH_CHAT_ID_HEADER=x-openwebui-chat-id
+
+# Fallback values when headers are not present
+AUTH_FALLBACK_USER_ID=default_user
+AUTH_FALLBACK_SESSION_ID=default_session
+```
+
+### Security Considerations
+
+**Current Security Features:**
+- User and session context management via trusted headers
+- Session isolation for memory (each session has separate memory)
+- User isolation for resources
 - Agent-specific tool access control
-- Session isolation for memory
 - Environment variable substitution for secure token management
 - MCP server authorization support
+
+**Security Limitations:**
+- **No Authentication**: The service does not authenticate users
+- **No Authorization**: The service does not verify user permissions
+- **Trust-based**: Headers and parameters are trusted without verification
+- **Deployment Requirement**: Must be deployed behind an authenticating proxy or service
+
+**Recommended Deployment:**
+- Deploy behind Open WebUI or another authenticating service
+- Use in trusted internal networks only
+- Do not expose directly to the internet without authentication layer

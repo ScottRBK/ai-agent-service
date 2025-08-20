@@ -4,6 +4,9 @@ from app.models.agents import ChatRequest, ChatResponse, AgentInfo, Conversation
 from app.core.agents.api_agent import APIAgent
 from app.core.agents.agent_tool_manager import AgentToolManager
 from app.utils.logging import logger
+from app.api.dependencies import get_auth_context_dep
+from app.models.auth import AuthContext
+from app.config.settings import settings
 from datetime import datetime
 import json
 import os
@@ -121,6 +124,7 @@ async def get_agent_info(agent_id: str):
 async def chat_with_agent(
     agent_id: str,
     request: ChatRequest,
+    auth_context: AuthContext = Depends(get_auth_context_dep),
     agent_tool_manager: AgentToolManager = Depends(get_agent_tool_manager)
 ):
     """Send a message to an agent and get response"""
@@ -129,12 +133,22 @@ async def chat_with_agent(
         agents = load_agent_configs()
         if not any(agent.get("agent_id") == agent_id for agent in agents):
             raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        
+        # Priority: Headers > Request Body > Defaults
+        user_id = auth_context.user.user_id
+        session_id = auth_context.session.session_id
+        
+        # Allow request body to override if headers not present
+        if auth_context.user.user_id == settings.AUTH_FALLBACK_USER_ID:
+            user_id = request.user_id or user_id
+            session_id = request.session_id or session_id
+        
 
         # Create API agent instance
         agent = APIAgent(
             agent_id=agent_id,
-            user_id=request.user_id,
-            session_id=request.session_id,
+            user_id=user_id,
+            session_id=session_id,
             model=request.model,
             model_settings=request.model_settings
         )
@@ -145,8 +159,8 @@ async def chat_with_agent(
         return ChatResponse(
             response=response,
             agent_id=agent_id,
-            user_id=request.user_id,
-            session_id=request.session_id,
+            user_id=user_id,
+            session_id=session_id,
             timestamp=datetime.now(),
             model_used=agent.model,
             tools_available=len(agent.available_tools)
